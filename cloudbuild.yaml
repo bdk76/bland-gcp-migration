@@ -62,8 +62,8 @@ steps:
       - '--destination=${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:latest'
       - '--cache=true'
       - '--cache-ttl=24h'
-      - '--build-arg=ENV=${BRANCH_NAME}'
-      - '--build-arg=BUILD_DATE=${_BUILD_DATE}'
+      - '--build-arg=ENV=$BRANCH_NAME'
+      - '--build-arg=BUILD_DATE=$BUILD_ID'
       - '--build-arg=VCS_REF=${COMMIT_SHA}'
       - '--build-arg=VERSION=${BRANCH_NAME}-${SHORT_SHA}'
     waitFor: ['install-and-test']
