@@ -117,14 +117,7 @@ steps:
           --set-env-vars="REGION=${_REGION}" \
           --set-env-vars="BUILD_ID=${BUILD_ID}" \
           --set-env-vars="COMMIT_SHA=${COMMIT_SHA}" \
-          --set-secrets="DATABASE_URL=database-url:latest" \
-          --set-secrets="REDIS_URL=redis-url:latest" \
-          --set-secrets="JWT_SECRET=jwt-secret:latest" \
-          --set-secrets="BLAND_API_KEY=bland-api-key:latest" \
           --labels="environment=${ENV},version=${SHORT_SHA},branch=${BRANCH_NAME},managed-by=cloud-build" \
-          --service-account=bland-service-account@${_PROJECT_ID}.iam.gserviceaccount.com \
-          --vpc-connector=projects/${_PROJECT_ID}/locations/${_REGION}/connectors/bland-connector \
-          --vpc-egress=all-traffic \
           --revision-suffix=${SHORT_SHA}
         
         # Get service URL

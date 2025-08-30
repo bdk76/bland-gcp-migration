@@ -186,27 +186,23 @@ jobs:
       - name: Deploy to Cloud Run
         id: deploy
         run: |
+          # Deploy without secrets first (they can be added later)
           gcloud run deploy ${{ env.FULL_SERVICE_NAME }} \
             --image ${{ needs.build.outputs.image-url }}:${{ needs.build.outputs.image-tag }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
-            --cpu 2 \
-            --memory 2Gi \
-            --min-instances 1 \
-            --max-instances 100 \
-            --concurrency 1000 \
+            --cpu 1 \
+            --memory 512Mi \
+            --min-instances 0 \
+            --max-instances 10 \
+            --concurrency 80 \
             --timeout 300 \
             --set-env-vars="NODE_ENV=${{ env.ENVIRONMENT }}" \
             --set-env-vars="PROJECT_ID=${{ env.PROJECT_ID }}" \
             --set-env-vars="REGION=${{ env.REGION }}" \
-            --set-secrets="DATABASE_URL=database-url:latest" \
-            --set-secrets="REDIS_URL=redis-url:latest" \
-            --set-secrets="JWT_SECRET=jwt-secret:latest" \
-            --set-secrets="BLAND_API_KEY=bland-api-key:latest" \
-            --labels="environment=${{ env.ENVIRONMENT }},version=${{ needs.build.outputs.image-tag }},managed-by=github-actions" \
-            --service-account=bland-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+            --labels="environment=${{ env.ENVIRONMENT }},version=${{ needs.build.outputs.image-tag }},managed-by=github-actions"
           
           # Get the service URL
           URL=$(gcloud run services describe ${{ env.FULL_SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)')
