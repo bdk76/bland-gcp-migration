@@ -41,6 +41,8 @@ credentials.json
 gcloud/
 .gcloud/
 application_default_credentials.json
+sa-key.json
+sa-key-base64.txt
 
 # Docker
 Dockerfile.local
