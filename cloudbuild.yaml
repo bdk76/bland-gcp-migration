@@ -62,7 +62,7 @@ steps:
       - '--destination=${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:latest'
       - '--cache=true'
       - '--cache-ttl=24h'
-      - '--build-arg=ENV=$BRANCH_NAME'
+      - '--build-arg=ENV=production'
       - '--build-arg=BUILD_DATE=$BUILD_ID'
       - '--build-arg=VCS_REF=${COMMIT_SHA}'
       - '--build-arg=VERSION=${BRANCH_NAME}-${SHORT_SHA}'
@@ -77,28 +77,28 @@ steps:
       - |
         # Determine environment based on branch
         if [[ "${BRANCH_NAME}" == "main" || "${BRANCH_NAME}" == "master" ]]; then
-          ENV="production"
-          MIN_INSTANCES="2"
-          MAX_INSTANCES="100"
-          CPU="4"
-          MEMORY="4Gi"
-        elif [[ "${BRANCH_NAME}" == "staging" ]]; then
-          ENV="staging"
+          ENVIRONMENT="production"
           MIN_INSTANCES="1"
-          MAX_INSTANCES="50"
-          CPU="2"
-          MEMORY="2Gi"
-        else
-          ENV="development"
-          MIN_INSTANCES="0"
           MAX_INSTANCES="10"
           CPU="1"
-          MEMORY="1Gi"
+          MEMORY="512Mi"
+        elif [[ "${BRANCH_NAME}" == "staging" ]]; then
+          ENVIRONMENT="staging"
+          MIN_INSTANCES="0"
+          MAX_INSTANCES="5"
+          CPU="1"
+          MEMORY="512Mi"
+        else
+          ENVIRONMENT="development"
+          MIN_INSTANCES="0"
+          MAX_INSTANCES="3"
+          CPU="1"
+          MEMORY="512Mi"
         fi
         
-        SERVICE_NAME="${_SERVICE_NAME}-${ENV}"
+        SERVICE_NAME="${_SERVICE_NAME}-${ENVIRONMENT}"
         
-        echo "🚀 Deploying to Cloud Run (${ENV} environment)..."
+        echo "🚀 Deploying to Cloud Run (${ENVIRONMENT} environment)..."
         
         gcloud run deploy ${SERVICE_NAME} \
           --image ${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:${COMMIT_SHA} \
@@ -112,12 +112,12 @@ steps:
           --max-instances ${MAX_INSTANCES} \
           --concurrency 1000 \
           --timeout 300 \
-          --set-env-vars="NODE_ENV=${ENV}" \
+          --set-env-vars="NODE_ENV=${ENVIRONMENT}" \
           --set-env-vars="PROJECT_ID=${_PROJECT_ID}" \
           --set-env-vars="REGION=${_REGION}" \
           --set-env-vars="BUILD_ID=${BUILD_ID}" \
           --set-env-vars="COMMIT_SHA=${COMMIT_SHA}" \
-          --labels="environment=${ENV},version=${SHORT_SHA},branch=${BRANCH_NAME},managed-by=cloud-build" \
+          --labels="environment=${ENVIRONMENT},version=${SHORT_SHA},branch=${BRANCH_NAME},managed-by=cloud-build" \
           --revision-suffix=${SHORT_SHA}
         
         # Get service URL
