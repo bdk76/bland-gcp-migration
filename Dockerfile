@@ -1,44 +1,45 @@
-# Multi-stage Dockerfile for Node.js application
-FROM node:20-alpine AS base
+# Multi-stage build for production Node.js application
+FROM node:20-alpine AS builder
 
-# Install dependencies only when needed
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
+# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install production dependencies
 RUN npm ci --only=production
 
-# Rebuild the source code only when needed
-FROM base AS builder
+# Production stage
+FROM node:20-alpine
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Set working directory
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
 
-# Production image, copy all the files and run
-FROM base AS runner
-WORKDIR /app
+# Copy node_modules from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-ENV NODE_ENV=production
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nodejs
-
-# Copy necessary files
-COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+# Copy application code
 COPY --chown=nodejs:nodejs . .
 
+# Switch to non-root user
 USER nodejs
 
+# Expose port (Cloud Run uses 8080 by default)
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})" || exit 1
+# Set environment to production
+ENV NODE_ENV=production
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
 CMD ["node", "index.js"]
