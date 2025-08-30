@@ -12,6 +12,11 @@ on:
           - production
           - staging
           - development
+      deploy_all:
+        description: 'Deploy all services'
+        required: false
+        default: true
+        type: boolean
   push:
     branches:
       - main
@@ -53,10 +58,13 @@ jobs:
       - name: Detect services to deploy
         id: detect
         run: |
-          # If workflow_dispatch, deploy all services
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # If workflow_dispatch with deploy_all=true, deploy all services
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.deploy_all }}" == "true" ]]; then
             services=$(ls -d services/*/ | xargs -n1 basename | jq -R -s -c 'split("\n")[:-1]')
             echo "Deploying all services: $services"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            services=$(ls -d services/*/ | xargs -n1 basename | jq -R -s -c 'split("\n")[:-1]')
+            echo "Deploying all services (workflow_dispatch): $services"
           else
             # Otherwise, detect changed services
             services=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
