@@ -1,6 +1,3 @@
-// ============================================
-// services/zipcode-validate/package.json
-// ============================================
 {
   "name": "zipcode-validate-service",
   "version": "2.0.0",

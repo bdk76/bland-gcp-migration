@@ -1,6 +1,3 @@
-/ ============================================
-// services/email-validate/package.json  
-// ============================================
 {
   "name": "email-validate-service",
   "version": "2.0.0",
