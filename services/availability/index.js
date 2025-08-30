@@ -38,8 +38,8 @@ app.get('/health', async (req, res) => {
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      service: 'availability',
-      version: process.env.SERVICE_VERSION || '1.0.0',
+          service: 'availability',
+    version: process.env.SERVICE_VERSION || '2.0.0',
       dependencies: {
         firestore: firestoreHealthy ? 'connected' : 'disconnected',
         cache: {
