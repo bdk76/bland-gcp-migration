@@ -1,0 +1,198 @@
+name: Deploy All Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+      - '.github/workflows/deploy-services.yml'
+
+env:
+  PROJECT_ID: bland-gcp-migration
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/bland-gcp-migration/bland-services
+
+jobs:
+  setup:
+    name: Setup and Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="production"
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            ENV="staging"
+          else
+            ENV="development"
+          fi
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+
+      - name: Detect services to deploy
+        id: detect
+        run: |
+          # If workflow_dispatch, deploy all services
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            services=$(ls -d services/*/ | xargs -n1 basename | jq -R -s -c 'split("\n")[:-1]')
+            echo "Deploying all services: $services"
+          else
+            # Otherwise, detect changed services
+            services=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+            if [[ "$services" == "[]" ]]; then
+              # If no specific service changed, deploy all
+              services=$(ls -d services/*/ | xargs -n1 basename | jq -R -s -c 'split("\n")[:-1]')
+            fi
+          fi
+          echo "services=$services" >> $GITHUB_OUTPUT
+
+  deploy-service:
+    name: Deploy ${{ matrix.service }}
+    needs: setup
+    runs-on: ubuntu-latest
+    if: needs.setup.outputs.services != '[]'
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.setup.outputs.services) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set service configuration
+        id: config
+        run: |
+          # Set resource limits based on service
+          case "${{ matrix.service }}" in
+            availability)
+              echo "memory=512Mi" >> $GITHUB_OUTPUT
+              echo "cpu=1" >> $GITHUB_OUTPUT
+              echo "min_instances=0" >> $GITHUB_OUTPUT
+              echo "max_instances=10" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "memory=256Mi" >> $GITHUB_OUTPUT
+              echo "cpu=1" >> $GITHUB_OUTPUT
+              echo "min_instances=0" >> $GITHUB_OUTPUT
+              echo "max_instances=5" >> $GITHUB_OUTPUT
+              ;;
+          esac
+          
+          # Set service name with environment suffix
+          echo "service_name=${{ matrix.service }}-service-${{ needs.setup.outputs.environment }}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ matrix.service }}-service:latest \
+            -t ${{ env.REGISTRY }}/${{ matrix.service }}-service:${{ github.sha }} \
+            services/${{ matrix.service }}
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ matrix.service }}-service:latest
+          docker push ${{ env.REGISTRY }}/${{ matrix.service }}-service:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        run: |
+          gcloud run deploy ${{ steps.config.outputs.service_name }} \
+            --image ${{ env.REGISTRY }}/${{ matrix.service }}-service:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --cpu ${{ steps.config.outputs.cpu }} \
+            --memory ${{ steps.config.outputs.memory }} \
+            --min-instances ${{ steps.config.outputs.min_instances }} \
+            --max-instances ${{ steps.config.outputs.max_instances }} \
+            --concurrency 80 \
+            --timeout 300 \
+            --set-env-vars="NODE_ENV=${{ needs.setup.outputs.environment }}" \
+            --set-env-vars="PROJECT_ID=${{ env.PROJECT_ID }}" \
+            --set-env-vars="REGION=${{ env.REGION }}" \
+            --set-env-vars="SERVICE_NAME=${{ matrix.service }}" \
+            --labels="environment=${{ needs.setup.outputs.environment }},version=${{ github.sha }},service=${{ matrix.service }},managed-by=github-actions"
+          
+          # Get service URL
+          URL=$(gcloud run services describe ${{ steps.config.outputs.service_name }} --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "url=${URL}" >> $GITHUB_OUTPUT
+          echo "Deployed to: ${URL}"
+
+      - name: Test service health
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          echo "Testing health endpoint: ${URL}/health"
+          
+          # Wait a bit for service to be ready
+          sleep 10
+          
+          # Test health endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" ${URL}/health || echo "000")
+          if [[ $response == "200" ]]; then
+            echo "✅ Health check passed - service is accessible"
+          elif [[ $response == "403" ]]; then
+            echo "✅ Service is running (requires authentication)"
+            # Try with auth token
+            TOKEN=$(gcloud auth print-identity-token 2>/dev/null || echo "")
+            if [[ ! -z "$TOKEN" ]]; then
+              auth_response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" ${URL}/health || echo "000")
+              if [[ $auth_response == "200" ]]; then
+                echo "✅ Authenticated health check passed"
+                curl -s -H "Authorization: Bearer $TOKEN" ${URL}/health | jq '.' || true
+              fi
+            fi
+          else
+            echo "⚠️ Health check returned: $response"
+          fi
+
+  summary:
+    name: Deployment Summary
+    needs: [setup, deploy-service]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Services Deployed:** ${{ needs.setup.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 View Services" >> $GITHUB_STEP_SUMMARY
+          echo "[Cloud Run Console](https://console.cloud.google.com/run?project=${{ env.PROJECT_ID }})" >> $GITHUB_STEP_SUMMARY

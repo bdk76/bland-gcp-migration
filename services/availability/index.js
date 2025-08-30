@@ -301,31 +301,28 @@ async function deriveStateFromZip(zipCode, requestId) {
   }
   
   try {
-    // TODO: Replace with Firestore lookup when migrating from Airtable
-    // For now, using static mapping
-    const zipData = await lookupZipCode(cleanZip);
-    if (zipData) {
-      cache.set(cacheKey, zipData, 3600); // Cache for 1 hour
-      return zipData.state_abbreviation || zipData.state;
+    // TODO: MIGRATION POINT - Replace with Firestore lookup when migrating from Airtable
+    // Query Firestore for ZIP code data
+    const zipRef = firestore.collection('zip_codes').doc(cleanZip);
+    const doc = await zipRef.get();
+    
+    if (doc.exists) {
+      const data = doc.data();
+      const state = data.state_abbreviation || data.state;
+      cache.set(cacheKey, { state_abbreviation: state }, 3600);
+      return state;
     }
+    
+    // Fallback to static mapping during migration
+    const fallbackMap = {
+      '10001': 'NY', '90210': 'CA', '60601': 'IL', '33101': 'FL'
+    };
+    return fallbackMap[cleanZip] || null;
+    
   } catch (error) {
     console.error(`[${requestId}] ZIP lookup failed:`, error);
+    return null;
   }
-  
-  return null;
-}
-
-async function lookupZipCode(zip) {
-  // TODO: Replace with Firestore query
-  // Temporary static mapping
-  const mapping = {
-    '10001': { state: 'New York', state_abbreviation: 'NY' },
-    '90210': { state: 'California', state_abbreviation: 'CA' },
-    '60601': { state: 'Illinois', state_abbreviation: 'IL' },
-    '33101': { state: 'Florida', state_abbreviation: 'FL' }
-  };
-  
-  return mapping[zip] || null;
 }
 
 async function fetchAvailabilityFromFirestore(params, requestId) {
@@ -339,7 +336,7 @@ async function fetchAvailabilityFromFirestore(params, requestId) {
   const rangeEnd = sortedDates[sortedDates.length - 1];
   
   try {
-    // NOTE: This replaces Airtable query - FUTURE MIGRATION POINT
+    // TODO: MIGRATION POINT - This replaces Airtable query
     // Using Firestore collection 'MVP-Availability-Dashboard' as mentioned
     const availabilityRef = firestore.collection('MVP-Availability-Dashboard');
     
@@ -674,7 +671,7 @@ function getTimezoneFromState(state, patientTimezone = null) {
 
 // Start server
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Availability service listening on port ${PORT}`);
   console.log(`Environment: ${process.env.ENVIRONMENT || 'production'}`);
   console.log(`Service version: ${process.env.SERVICE_VERSION || '1.0.0'}`);

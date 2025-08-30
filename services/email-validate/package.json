@@ -1,10 +1,10 @@
-// ============================================
-// services/availability/package.json
+/ ============================================
+// services/email-validate/package.json  
 // ============================================
 {
-  "name": "availability-service",
+  "name": "email-validate-service",
   "version": "2.0.0",
-  "description": "Appointment availability service",
+  "description": "Email validation service",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -15,11 +15,8 @@
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "@google-cloud/firestore": "^7.1.0",
-    "@google-cloud/pubsub": "^4.0.7",
-    "moment": "^2.29.4",
-    "moment-timezone": "^0.5.43",
     "node-cache": "^5.1.2",
-    "p-limit": "^3.1.0"
+    "email-validator": "^2.0.4"
   },
   "engines": {
     "node": ">=18.0.0"
