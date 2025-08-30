@@ -1,0 +1,165 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+.npm
+.eslintcache
+.node_repl_history
+.yarn-integrity
+.cache/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+*.env
+
+# Google Cloud Platform / Service Account Keys
+*-key.json
+*-credentials.json
+*-service-account.json
+*-sa.json
+service-account*.json
+gcp-key*.json
+google-credentials*.json
+keyfile.json
+credentials.json
+gcloud/
+.gcloud/
+application_default_credentials.json
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+docker-compose.local.yml
+.dockerignore.local
+*.tar
+*.tar.gz
+
+# Docker build artifacts
+.docker/
+docker/volumes/
+docker/data/
+**/build/
+**/dist/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate.d/
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/
+.phpunit.result.cache
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test/
+.parcel-cache/
+
+# Package manager locks (uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.old
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Secrets and sensitive data
+secrets/
+private/
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+.secrets/
+config/secrets/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Monitoring and APM
+newrelic_agent.log
+.apm/
+
+# Miscellaneous
+*.zip
+*.gz
+*.rar
+*.7z
+.cache/
+.tmp/
