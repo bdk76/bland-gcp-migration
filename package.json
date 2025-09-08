@@ -1,5 +1,8 @@
 {
     "name": "bland-gcp-migration",
     "version": "1.0.0",
-    "private": true
-  }
+    "private": true,
+    "devDependencies": {
+        "jest": "^30.1.3"
+    }
+}
