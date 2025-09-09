@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const w2n = require('word-to-numbers');
 
 const app = express();
 app.use(bodyParser.json());
@@ -65,6 +66,27 @@ app.post('/clean-street', (req, res) => {
     cleaned_street: cleanedStreet,
     is_valid: true // For now, we'll assume all streets are valid after cleaning
   });
+});
+
+app.post('/normalize-number', (req, res) => {
+  const { number_string } = req.body;
+
+  if (!number_string) {
+    return res.status(400).json({ error: 'Missing required field: number_string' });
+  }
+
+  try {
+    const normalizedNumber = w2n.parse(number_string);
+    res.json({
+      original_string: number_string,
+      normalized_number: normalizedNumber
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: 'Could not normalize string to number',
+      original_string: number_string
+    });
+  }
 });
 
 const PORT = process.env.PORT || 8080;

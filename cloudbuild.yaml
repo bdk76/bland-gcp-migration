@@ -29,3 +29,15 @@ steps:
   - 'submit'
   - '--config=services/availability/cloudbuild.yaml'
   - '.'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'builds'
+  - 'submit'
+  - '--config=services/email-cleaner/cloudbuild.yaml'
+  - '.'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'builds'
+  - 'submit'
+  - '--config=services/street-cleaner/cloudbuild.yaml'
+  - '.'

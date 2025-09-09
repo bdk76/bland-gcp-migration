@@ -17,14 +17,21 @@ async function normalizeDateOfBirth(rawDob) {
     return null;
   }
 
-  // --- STRATEGY 1: Google NL API First ---
+  // --- STRATEGY 1: Numeric Parser ---
+  const numericResult = parseNumericDate(rawDob);
+  if (numericResult && moment(numericResult).isValid()) {
+    console.log(`Numeric parser result: ${numericResult}`);
+    return numericResult;
+  }
+
+  // --- STRATEGY 2: Google NL API ---
   const nlApiResult = await nlApiDateParser(rawDob);
   console.log(`NL API parser result: ${nlApiResult}`);
   if (nlApiResult && moment(nlApiResult).isValid()) {
     return nlApiResult;
   }
 
-  // --- STRATEGY 2: Fallback to Custom Parser for specific formats ---
+  // --- STRATEGY 3: Fallback to Custom Parser for spoken formats ---
   const customResult = customSpokenDateParser(rawDob);
   console.log(`Custom parser result: ${customResult}`);
   if (customResult && moment(customResult).isValid()) {
@@ -33,6 +40,38 @@ async function normalizeDateOfBirth(rawDob) {
 
   return null;
 }
+
+function parseNumericDate(rawDob) {
+    const cleaned = rawDob.replace(/[\s,]/g, ''); // Remove spaces and commas
+    if (!/^\d+$/.test(cleaned)) {
+        return null;
+    }
+
+    // List of possible formats, from most specific to least specific.
+    const formats = [
+        'MMDDYYYY',
+        'MDDYYYY',
+        'MMDYYYY',
+        'MDYYYY',
+        'MMDDYY',
+        'MDDYY',
+        'MMDYY',
+        'MDYY'
+    ];
+
+    const date = moment(cleaned, formats, true); // Use strict parsing
+
+    if (date.isValid()) {
+        // If a 2-digit year was parsed and resulted in a future date, subtract 100 years.
+        if (date.year() > moment().year()) {
+            date.subtract(100, 'years');
+        }
+        return date.format('YYYY-MM-DD');
+    }
+
+    return null;
+}
+
 
 // Helper: Custom parser for specific patterns
 function customSpokenDateParser(text) {

@@ -9,40 +9,32 @@ app.use(express.json());
 
 // Dictionary for common domain misspellings
 const domainCorrections = {
-  'gmaildotcom': 'gmail.com',
-  'gmaildotco': 'gmail.com',
-  'gmaildot': 'gmail.com',
-  'gmailcom': 'gmail.com',
-  'yahoodotcom': 'yahoo.com',
-  'yahoodotco': 'yahoo.com',
-  'yahoodot': 'yahoo.com',
-  'yahoocom': 'yahoo.com',
-  'outlookdotcom': 'outlook.com',
-  'outlookdotco': 'outlook.com',
-  'outlookdot': 'outlook.com',
-  'outlookcom': 'outlook.com',
+  // Gmail
+  'gmaildotcom': 'gmail.com', 'gmaildotco': 'gmail.com', 'gmaildot': 'gmail.com', 'gmailcom': 'gmail.com',
+  'gaildotcom': 'gmail.com', 'gaildotco': 'gmail.com', 'gaildot': 'gmail.com', 'gailcom': 'gmail.com',
+  'ghaildotcom': 'gmail.com', 'ghaildotco': 'gmail.com', 'ghaildot': 'gmail.com', 'ghailcom': 'gmail.com',
+  // Yahoo
+  'yahoodotcom': 'yahoo.com', 'yahoodotco': 'yahoo.com', 'yahoodot': 'yahoo.com', 'yahoocom': 'yahoo.com',
+  'yahodotcom': 'yahoo.com', 'yahodotco': 'yahoo.com', 'yahodot': 'yahoo.com', 'yahocom': 'yahoo.com',
+  // Outlook / Hotmail / Live
+  'outlookdotcom': 'outlook.com', 'outlookdotco': 'outlook.com', 'outlookdot': 'outlook.com', 'outlookcom': 'outlook.com',
+  'hotmaildotcom': 'hotmail.com', 'hotmaledotcom': 'hotmail.com', 'hotmalecom': 'hotmail.com',
+  'livedotcom': 'live.com', 'livedotco': 'live.com', 'livedot': 'live.com', 'livecom': 'live.com',
+  // iCloud
+  'iclouddotcom': 'icloud.com', 'iclouddotco': 'icloud.com', 'iclouddot': 'icloud.com', 'icloudcom': 'icloud.com',
+  // Other
   'aolcom': 'aol.com',
-  'iclouddotcom': 'icloud.com',
-  'iclouddotco': 'icloud.com',
-  'iclouddot': 'icloud.com',
-  'icloudcom': 'icloud.com',
   'protonmaildotcom': 'protonmail.com',
-  'protonmaildotco': 'protonmail.com',
-  'protonmaildot': 'protonmail.com',
-  'protonmailcom': 'protonmail.com',
   'yandexdotcom': 'yandex.com',
-  'yandexdotco': 'yandex.com',
-  'yandexdot': 'yandex.com',
-  'yandexcom': 'yandex.com',
   'maildotcom': 'mail.com',
-  'maildotco': 'mail.com',
-  'maildot': 'mail.com',
-  'mailcom': 'mail.com',
-  'livedotcom': 'live.com',
-  'livedotco': 'live.com',
-  'livedot': 'live.com',
-  'livecom': 'live.com',
   'examplecom': 'example.com'
+};
+
+const tldCorrections = {
+  'comm': 'com',
+  'co': 'com',
+  'nt': 'net',
+  'og': 'org'
 };
 
 function manualClean(emailString) {
@@ -52,12 +44,23 @@ function manualClean(emailString) {
   cleaned = cleaned.replace(/at/g, '@');
 
   // Apply domain corrections before replacing 'dot'
-  const [localPart, domainPart] = cleaned.split('@');
+  let [localPart, domainPart] = cleaned.split('@');
   if (domainCorrections[domainPart]) {
     cleaned = `${localPart}@${domainCorrections[domainPart]}`;
   }
 
   cleaned = cleaned.replace(/dot/g, '.');
+
+  // TLD correction
+  [localPart, domainPart] = cleaned.split('@');
+  if (domainPart) {
+    const domainParts = domainPart.split('.');
+    const tld = domainParts[domainParts.length - 1];
+    if (tldCorrections[tld]) {
+      domainParts[domainParts.length - 1] = tldCorrections[tld];
+      cleaned = `${localPart}@${domainParts.join('.')}`;
+    }
+  }
 
   // Final cleanup for repeated characters
   cleaned = cleaned.replace(/@@/g, '@'); // Remove double @
