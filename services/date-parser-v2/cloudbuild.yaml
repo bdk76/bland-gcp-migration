@@ -1,0 +1,21 @@
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-parser-v2:$_TAG', '.' ]
+- name: 'gcr.io/cloud-builders/docker'
+  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-parser-v2:$_TAG' ]
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args:
+  - 'run'
+  - 'deploy'
+  - 'date-parser-v2'
+  - '--image'
+  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-parser-v2:$_TAG'
+  - '--region'
+  - 'us-central1'
+  - '--platform'
+  - 'managed'
+  - '--allow-unauthenticated'
+images:
+- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-parser-v2:$_TAG'
