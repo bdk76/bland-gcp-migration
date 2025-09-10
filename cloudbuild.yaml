@@ -41,3 +41,9 @@ steps:
   - 'submit'
   - '--config=services/street-cleaner/cloudbuild.yaml'
   - '.'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'builds'
+  - 'submit'
+  - '--config=services/name-extraction/cloudbuild.yaml'
+  - '.'
