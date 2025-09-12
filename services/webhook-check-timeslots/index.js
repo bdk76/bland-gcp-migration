@@ -271,7 +271,7 @@ app.post('/webhook/check-timeslots', async (req, res) => {
         time_slot: slot.time,
         // Align with Bland flow prompts
         natural_time: startTime,
-        formatted_datetime: slotMoment.format('MMMM DD, YYYY [at] h:mm A'),
+        formatted_datetime: slotMoment.format('MMMM DD [at] h:mm A'),
         day_of_week: slotMoment.format('dddd'),
         day_name: slotMoment.format('dddd'),
         provider: slot.provider,
