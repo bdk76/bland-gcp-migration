@@ -47,3 +47,9 @@ steps:
   - 'submit'
   - '--config=services/name-extraction/cloudbuild.yaml'
   - '.'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'builds'
+  - 'submit'
+  - '--config=../gabar-ai-athena-integration/secure-dashboard/cloudbuild.yaml'
+  - '.'
