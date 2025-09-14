@@ -3,157 +3,102 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const moment = require('moment');
 const cors = require('cors');
-const language = require('@google-cloud/language');
+const { parse, format, isValid, subYears } = require('date-fns');
+
+const chrono = require('chrono-node');
 
 const app = express();
-const languageClient = new language.LanguageServiceClient();
+
+
 
 // --- Standalone, Testable Business Logic ---
 
 // New Hybrid Function
+
+
 async function normalizeDateOfBirth(rawDob) {
   console.log(`Normalizing DOB: ${rawDob}`);
   if (!rawDob || typeof rawDob !== 'string' || rawDob.trim().length === 0) {
+    console.log("Returning null due to empty or invalid input.");
     return null;
   }
 
-  // --- STRATEGY 1: Numeric Parser ---
-  const numericResult = parseNumericDate(rawDob);
-  if (numericResult && moment(numericResult).isValid()) {
-    console.log(`Numeric parser result: ${numericResult}`);
-    return numericResult;
-  }
-
-  // --- STRATEGY 2: Google NL API ---
-  const nlApiResult = await nlApiDateParser(rawDob);
-  console.log(`NL API parser result: ${nlApiResult}`);
-  if (nlApiResult && moment(nlApiResult).isValid()) {
-    return nlApiResult;
-  }
-
-  // --- STRATEGY 3: Fallback to Custom Parser for spoken formats ---
-  const customResult = customSpokenDateParser(rawDob);
-  console.log(`Custom parser result: ${customResult}`);
-  if (customResult && moment(customResult).isValid()) {
-    return customResult;
-  }
-
-  return null;
-}
-
-function parseNumericDate(rawDob) {
-    const cleaned = rawDob.replace(/[\s,]/g, ''); // Remove spaces and commas
-    if (!/^\d+$/.test(cleaned)) {
-        return null;
-    }
-
-    // List of possible formats, from most specific to least specific.
-    const formats = [
-        'MMDDYYYY',
-        'MDDYYYY',
-        'MMDYYYY',
-        'MDYYYY',
-        'MMDDYY',
-        'MDDYY',
-        'MMDYY',
-        'MDYY'
-    ];
-
-    const date = moment(cleaned, formats, true); // Use strict parsing
-
-    if (date.isValid()) {
-        // If a 2-digit year was parsed and resulted in a future date, subtract 100 years.
-        if (date.year() > moment().year()) {
-            date.subtract(100, 'years');
-        }
-        return date.format('YYYY-MM-DD');
-    }
-
-    return null;
-}
-
-
-// Helper: Custom parser for specific patterns
-function customSpokenDateParser(text) {
-    const stringToNumber = (s) => {
-        const wordToNum = {
-            zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-            eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
-            twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90
-        };
-        const magnitude = { hundred: 100, thousand: 1000 };
-
-        let total = 0;
-        let currentNumber = 0;
-
-        s.toLowerCase().split(/\s|-/).forEach(word => {
-            if (wordToNum[word]) {
-                currentNumber += wordToNum[word];
-            } else if (magnitude[word]) {
-                currentNumber *= magnitude[word];
-                if (magnitude[word] === 1000) {
-                    total += currentNumber;
-                    currentNumber = 0;
-                }
-            } else if (!isNaN(parseInt(word))) {
-                currentNumber += parseInt(word);
-            }
-        });
-        total += currentNumber;
-        return total;
+  try {
+    const wordToNum = {
+        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+        'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
+        'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90
     };
 
-    let str = text.toLowerCase().replace(/,/g, '').replace(/\b(the|of)\b/g, '').replace(/\s+/g, ' ').trim();
-    const dayMap = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20, 'twenty-first': 21, 'twenty-second': 22, 'twenty-third': 23, 'twenty-fourth': 24, 'twenty-fifth': 25, 'twenty-sixth': 26, 'twenty-seventh': 27, 'twenty-eighth': 28, 'twenty-ninth': 29, 'thirtieth': 30, 'thirty-first': 31, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-    const monthMap = { jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
+    let cleanedText = rawDob.toLowerCase().trim();
+    
+    // Replace ordinal indicators (st, nd, rd, th)
+    cleanedText = cleanedText.replace(/(\d+)(st|nd|rd|th)/g, '$1');
 
-    for (const [word, num] of Object.entries(dayMap)) {
-        str = str.replace(word, num);
+    for (const word in wordToNum) {
+        cleanedText = cleanedText.replace(new RegExp(`\\b${word}\\b`, 'g'), wordToNum[word]);
     }
 
-    const parts = str.split(' ');
-    let day, month, year;
+    cleanedText = cleanedText.replace(/(\d{1,2}) (\d{1})/g, (match, p1, p2) => {
+        if (parseInt(p1) >= 20 && parseInt(p2) < 10) {
+            return parseInt(p1) + parseInt(p2);
+        }
+        return match;
+    });
 
-    if (monthMap[parts[0]]) {
-        month = monthMap[parts[0]];
-        const dayStr = parts[1];
-        const yearStr = parts.slice(2).join(' ');
+    cleanedText = cleanedText.replace(/(\d{2}) (\d{2})/g, (match, p1, p2) => {
+        return p1 + p2;
+    });
 
-        day = parseInt(dayStr);
-        year = stringToNumber(yearStr);
+    // More robust date parsing using date-fns
+    const formats = [
+      'MMMM d yyyy',
+      'd MMMM yyyy',
+      'MM/dd/yyyy',
+      'M/d/yyyy',
+      'MM-dd-yyyy',
+      'M-d-yyyy',
+      'yyyy-MM-dd',
+      'yyyy/MM/dd',
+    ];
 
-        if (!isNaN(day) && !isNaN(year)) {
-            if (year < 100) year += 1900;
-            const date = moment({ year, month: month - 1, day });
-            if (date.isValid()) return date.format('YYYY-MM-DD');
+    let parsedDate;
+    for (const fmt of formats) {
+      const date = parse(cleanedText, fmt, new Date());
+      if (isValid(date)) {
+        parsedDate = date;
+        break;
+      }
+    }
+    
+    // Fallback to chrono-node for more complex cases
+    if (!parsedDate) {
+        const chronoResult = chrono.parseDate(cleanedText, new Date(), { forwardDate: false });
+        if (chronoResult) {
+            parsedDate = chronoResult;
         }
     }
 
+    if (parsedDate && isValid(parsedDate)) {
+      // Check if the year is plausible (e.g., not in the future and not more than 120 years ago)
+      const currentYear = new Date().getFullYear();
+      const year = parsedDate.getFullYear();
+      if (year > currentYear || year < currentYear - 120) {
+          console.log(`Parsed year ${year} is not plausible. Returning null.`);
+          return null;
+      }
+      return format(parsedDate, 'yyyy-MM-dd');
+    }
+
+    console.log("Failed to parse date with all methods. Returning null.");
     return null;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return null;
+  }
 }
 
-// Helper: The NL API parser from before
-async function nlApiDateParser(rawDob) {
-    const processedDob = rawDob.toLowerCase().replace(/(st|nd|rd|th),/g, '');
-    const document = { content: processedDob, type: 'PLAIN_TEXT' };
-    try {
-        const [result] = await languageClient.analyzeEntities({ document });
-        console.log(`NL API result: ${JSON.stringify(result)}`);
-        const dateEntity = result.entities.find(e => e.type === 'DATE');
-        console.log(`NL API date entity: ${JSON.stringify(dateEntity)}`);
-        if (dateEntity && dateEntity.metadata && dateEntity.metadata.year && dateEntity.metadata.month && dateEntity.metadata.day) {
-            const { year, month, day } = dateEntity.metadata;
-            const parsedDate = moment({ year, month: month - 1, day });
-            if (parsedDate.isValid() && parsedDate.year() >= 1900 && parsedDate.year() <= moment().year()) {
-                return parsedDate.format('YYYY-MM-DD');
-            }
-        }
-    } catch (error) {
-        console.error(`NL API Error for '${rawDob}':`, error.details);
-        return null;
-    }
-    return null;
-}
+
 
 
 // --- Express App Setup (Transport Layer) ---
