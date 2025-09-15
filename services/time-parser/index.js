@@ -38,6 +38,8 @@ function preprocessText(text) {
     'eod': '5:00pm',
     'as soon as possible': 'today',
     'assoonaspossible': 'today',
+    'anytimenextweek': 'anytime next week',
+    'tomorrowanytime': 'tomorrow anytime',
   };
   for (const [key, value] of Object.entries(corrections)) {
     cleanedText = cleanedText.replace(new RegExp(`\b${key}\b`, 'g'), value);
@@ -50,7 +52,6 @@ function preprocessText(text) {
 // --- Validation ---
 function validateParsedDate(date) {
   if (!isValid(date)) return false;
-  // Plausibility check: not more than 2 years in the future or 1 year in the past
   if (isFuture(date) && date > addYears(new Date(), 2)) return false;
   if (isPast(date) && date < subYears(new Date(), 1)) return false;
   return true;
@@ -82,57 +83,17 @@ async function parseWithChrono(text, referenceDate) {
   return null;
 }
 
-async function parseWithFuzzyMatching(text, referenceDate) {
-    const dateParts = text.split(/\s+|\/|-/);
-    const fuse = new Fuse(dateParts, { includeScore: true, threshold: 0.4 });
-    // This is a simplified example. A real implementation would be more complex.
-    // For now, we'll just return null to show the structure.
-    return null;
-}
-
-async function parseWithGoogleNLP(text) {
-  try {
-    const document = { content: text, type: 'PLAIN_TEXT' };
-    const [result] = await languageClient.analyzeEntities({ document });
-    const entities = result.entities;
-    const dateEntity = entities.find(e => e.type === 'DATE');
-    if (dateEntity) {
-      // The NLP API returns metadata that needs to be parsed into a date.
-      // This is a simplified example.
-      return null;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error calling Google NLP API:', error);
-    return null;
-  }
-}
-
 // --- Main Parsing Orchestrator ---
 async function parseNaturalTime(naturalTime, timezone) {
   const cleanedTime = preprocessText(naturalTime);
   const referenceDate = zonedTimeToUtc(new Date(), timezone);
 
-  let parsedResult = null;
-
   // Layer 1: Strict Formats
-  parsedResult = await parseWithStrictFormats(cleanedTime, referenceDate);
+  let parsedResult = await parseWithStrictFormats(cleanedTime, referenceDate);
   if (parsedResult) return parsedResult;
 
   // Layer 2: Chrono
   parsedResult = await parseWithChrono(cleanedTime, referenceDate);
-  if (parsedResult && parsedResult.confidence === 'high') return parsedResult;
-
-  // Layer 3: Fuzzy Matching (placeholder)
-  // parsedResult = await parseWithFuzzyMatching(cleanedTime, referenceDate);
-  // if (parsedResult) return parsedResult;
-
-  // Layer 4: Google NLP (as a last resort, placeholder)
-  // if (!parsedResult) {
-  //   parsedResult = await parseWithGoogleNLP(cleanedTime);
-  // }
-
-  // Return the best result we have, even if it's from the initial chrono parse
   if (parsedResult) return parsedResult;
 
   return { date: null, confidence: 'none', method: 'none' };
@@ -157,7 +118,7 @@ app.post('/api/enhanced-parse-natural-time', async (req, res) => {
     if (result.date) {
       res.json({
         success: true,
-        message: `Successfully parsed date/time using ${result.method} method.`,
+        message: `Successfully parsed date/time using ${result.method} method.`, 
         parsed: {
           date: format(result.date, 'yyyy-MM-dd', { timeZone: tz }),
           confidence: result.confidence,
