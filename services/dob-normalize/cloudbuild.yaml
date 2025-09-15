@@ -1,8 +1,10 @@
 
 steps:
 - name: 'gcr.io/cloud-builders/docker'
+  dir: 'services/dob-normalize'
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA', '.' ]
 - name: 'gcr.io/cloud-builders/docker'
+  dir: 'services/dob-normalize'
   args: [ 'push', 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA' ]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
