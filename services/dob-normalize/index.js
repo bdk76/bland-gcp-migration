@@ -78,7 +78,25 @@ async function normalizeDateOfBirth(rawDob) {
         }
     }
 
-    if (parsedDate && validateDOB(parsedDate)) {
+    if (parsedDate && isValid(parsedDate)) {
+      // 4. If the parsed date is in the future, it's likely chrono incorrectly assumed the current year.
+      // This happens when a user's birthday for the current year hasn't occurred yet (e.g., it's Sept, DOB is Dec).
+      if (parsedDate > new Date()) {
+          // A simple check to see if a year was explicitly mentioned.
+          const yearMentioned = /\b\d{4}\b/.test(cleanedText) || /\b(nineteen|twenty)/i.test(rawDob);
+          // If no year was mentioned, it's safe to assume they meant last year.
+          if (!yearMentioned) {
+              parsedDate.setFullYear(parsedDate.getFullYear() - 1);
+          }
+      }
+
+      // 5. Validate the final parsed year for plausibility.
+      const year = parsedDate.getFullYear();
+      const currentYear = new Date().getFullYear();
+      if (year > currentYear || year < currentYear - 120) {
+          console.log(`Parsed year ${year} is not plausible. Returning null.`);
+          return null;
+      }
       const finalDate = format(parsedDate, 'yyyy-MM-dd');
       console.log(`Successfully parsed date: ${finalDate}`);
       return finalDate;

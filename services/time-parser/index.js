@@ -117,8 +117,6 @@ function convertSpokenNumbersToDigits(text) {
  * Separates words that got stuck together - like adding spaces to "anytimethisweek"
  */
 function enhancedWordSeparation(text) {
-  let separated = text;
-  
   // All the keywords we want to separate
   const timeKeywords = [
     'anytime', 'any', 'time', 'day', 'this', 'next', 'last', 
@@ -139,21 +137,18 @@ function enhancedWordSeparation(text) {
   // Sort by length (longest first) to avoid partial matches
   const allKeywords = [...timeKeywords, ...dayNames, ...monthNames]
     .sort((a, b) => b.length - a.length);
+
+  // Create a single regex to find all keywords
+  const regex = new RegExp(`(${allKeywords.join('|')})`, 'gi');
   
-  // Smart separation - look for keywords stuck together
-  allKeywords.forEach(keyword => {
-    // Check if keyword has letters stuck after it
-    const pattern = new RegExp(`(${keyword})([a-z]+)`, 'gi');
-    separated = separated.replace(pattern, '$1 $2');
-    
-    // Check if keyword has letters stuck before it
-    const beforePattern = new RegExp(`([a-z]+)(${keyword})`, 'gi');
-    separated = separated.replace(beforePattern, '$1 $2');
-  });
-  
+  // Replace occurrences, adding spaces around them, then clean up multiple spaces
+  let separated = text.replace(regex, ' $1 ').trim();
+  separated = separated.replace(/\s+/g, ' ');
+
   // Special case: "anytime" should be "any time"
   separated = separated.replace(/\banytime\b/gi, 'any time');
   
+  console.log(`New separation: "${text}" -> "${separated}"`);
   return separated;
 }
 
