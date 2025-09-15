@@ -1,0 +1,16 @@
+{
+  "name": "webhook-zipcode-availability",
+  "version": "1.0.0",
+  "description": "A service to validate zip codes and check appointment availability.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "@google-cloud/firestore": "^7.7.0",
+    "moment-timezone": "^0.5.45"
+  }
+}

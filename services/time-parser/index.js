@@ -3,9 +3,11 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const chrono = require('chrono-node');
 const moment = require('moment-timezone');
+const { LanguageServiceClient } = require('@google-cloud/language');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const languageClient = new LanguageServiceClient();
 
 // Middleware
 app.use(cors());
@@ -15,6 +17,24 @@ app.use(bodyParser.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
+
+async function analyzeAndCorrectText(text) {
+  try {
+    const document = {
+      content: text,
+      type: 'PLAIN_TEXT',
+    };
+    const [result] = await languageClient.analyzeSyntax({ document });
+    const tokens = result.tokens;
+    const correctedText = tokens.map(token => token.text.content).join(' ');
+    console.log(`Original text: "${text}" -> Corrected text: "${correctedText}"`);
+    return correctedText;
+  } catch (error) {
+    console.error('Error calling Natural Language API:', error);
+    // Fallback to the original text if the API fails
+    return text;
+  }
+}
 
 // --- Start of New Pre-processing Logic ---
 
@@ -86,9 +106,16 @@ function preprocessNaturalTime(text) {
 
 
 // Main natural language time parser endpoint
-app.post('/api/enhanced-parse-natural-time', (req, res) => {
+app.post('/api/enhanced-parse-natural-time', async (req, res) => {
   try {
-    const { natural_time, timezone } = req.body;
+    if (!req.body.data || !req.body.data.datetime_request) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: data.datetime_request',
+        parsed: null
+      });
+    }
+    const { datetime_request: natural_time, timezone } = req.body.data;
 
     if (!natural_time) {
       return res.status(400).json({
@@ -103,13 +130,14 @@ app.post('/api/enhanced-parse-natural-time', (req, res) => {
     if (!moment.tz.zone(tz)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid timezone: ${timezone}. Please use a valid IANA timezone identifier.`,
+        message: `Invalid timezone: ${timezone}. Please use a valid IANA timezone identifier.`, 
         parsed: null
       });
     }
 
     // ** USE THE NEW PRE-PROCESSING FUNCTION **
-    const cleaned_natural_time = preprocessNaturalTime(natural_time);
+    const corrected_natural_time = await analyzeAndCorrectText(natural_time);
+    const cleaned_natural_time = preprocessNaturalTime(corrected_natural_time);
     
     const parsedResult = parseNaturalTime(cleaned_natural_time, tz);
 
@@ -122,7 +150,7 @@ app.post('/api/enhanced-parse-natural-time', (req, res) => {
     } else {
       res.status(200).json({ // Return 200 OK but with success: false as the call itself was valid
         success: false,
-        message: `Could not confidently parse the date/time from input: "${natural_time}"`,
+        message: `Could not confidently parse the date/time from input: "${natural_time}"`, 
         parsed: parsedResult
       });
     }

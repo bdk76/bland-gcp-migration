@@ -73,6 +73,7 @@ app.post('/api/zipcode-validated', (req, res) => {
                 city: place['place name'],
                 state_abbreviation: place['state abbreviation'],
                 timezone: timezoneData.zoneName,
+                days_available: 7,
               });
             } else {
               res.status(500).json({

@@ -9,8 +9,29 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(bodyParser.json());
 
+function addSpaces(text) {
+  // Add a space before common time-related keywords if they are not preceded by a space.
+  const keywords = ['next', 'last', 'this', 'tomorrow', 'today', 'week', 'day', 'month', 'year', 'morning', 'afternoon', 'evening', 'tonight', 'anytime'];
+  let processedText = text;
+
+  // Add a space before numbers
+  processedText = processedText.replace(/([a-zA-Z])(\d)/g, '$1 $2');
+  // Add a space after numbers
+  processedText = processedText.replace(/(\d)([a-zA-Z])/g, '$1 $2');
+
+  for (const keyword of keywords) {
+    const regex = new RegExp(`([a-zA-Z0-9])(${keyword})`, 'gi');
+    processedText = processedText.replace(regex, `$1 ${keyword}`);
+  }
+
+  return processedText;
+}
+
 app.post('/api/parse-date', (req, res) => {
-  const { datetime_request, timezone } = req.body.data;
+  let { datetime_request, timezone } = req.body.data;
+  console.log('original datetime_request:', datetime_request);
+  datetime_request = addSpaces(datetime_request);
+  console.log('datetime_request after addSpaces:', datetime_request);
 
   if (!datetime_request) {
     return res.status(400).json({
@@ -18,13 +39,30 @@ app.post('/api/parse-date', (req, res) => {
     });
   }
 
-  // Create a reference date in the specified timezone.
-  // This helps chrono-node to correctly interpret relative dates like "tomorrow".
-  const referenceDate = new Date();
+  if (datetime_request.toLowerCase().includes('lunchtime')) {
+    datetime_request = datetime_request.toLowerCase().replace('lunchtime', '12:00 PM');
+  }
 
-  const parsedResult = chrono.parse(datetime_request, {
-      forwardDate: true,
-  });
+  const referenceDate = new Date();
+  console.log('referenceDate:', referenceDate);
+
+  let parsedResult;
+  const dayOfMonthMatch = datetime_request.match(/(?:the |on the )?(\d+)(st|nd|rd|th)?/);
+
+  if (dayOfMonthMatch) {
+    const day = parseInt(dayOfMonthMatch[1], 10);
+    const date = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), day);
+    parsedResult = chrono.parse(date.toString(), referenceDate, { forwardDate: true });
+  } else {
+    parsedResult = chrono.parse(datetime_request, referenceDate, { forwardDate: true });
+  }
+
+  console.log('parsedResult:', parsedResult);
+
+  if (parsedResult.length > 0) {
+    console.log('parsedResult[0].text:', parsedResult[0].text);
+    console.log('parsedResult[0].start:', parsedResult[0].start.date());
+  }
 
   if (parsedResult.length === 0) {
     return res.status(400).json({
