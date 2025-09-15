@@ -1,15 +1,49 @@
-console.log("DOB NORMALIZE SERVICE STARTED");
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { parse, format, isValid } = require('date-fns');
+const { parse, format, isValid, isFuture, isPast, addYears, subYears } = require('date-fns');
+const { zonedTimeToUtc } = require('date-fns-tz');
 const chrono = require('chrono-node');
-const { wordToNumbers } = require('word-to-numbers');
+const { wordsToNumbers } = require('words-to-numbers');
 
 const app = express();
 
-// --- Standalone, Testable Business Logic ---
+// --- Text Pre-processing ---
+function preprocessText(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleanedText = text.toLowerCase();
 
+  cleanedText = cleanedText.split(' ').map(word => {
+      const num = wordsToNumbers(word, { fuzzy: true });
+      return isNaN(num) ? word : num.toString();
+  }).join(' ');
+
+  const corrections = {
+    'tomorow': 'tomorrow',
+    'wendsday': 'wednesday',
+    'thrusday': 'thursday',
+    'febuary': 'february',
+  };
+  for (const [key, value] of Object.entries(corrections)) {
+    cleanedText = cleanedText.replace(new RegExp(`\b${key}\b`, 'g'), value);
+  }
+  cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+  console.log(`Cleaned text: "${text}" -> "${cleanedText}"`);
+  return cleanedText;
+}
+
+// --- Validation ---
+function validateDOB(date) {
+    if (!isValid(date)) return false;
+    const currentYear = new Date().getFullYear();
+    const year = date.getFullYear();
+    if (year > currentYear || year < currentYear - 120) {
+        return false;
+    }
+    return true;
+}
+
+// --- Main Parsing Logic ---
 async function normalizeDateOfBirth(rawDob) {
   console.log(`Normalizing DOB: ${rawDob}`);
   if (!rawDob || typeof rawDob !== 'string' || rawDob.trim().length === 0) {
@@ -18,14 +52,12 @@ async function normalizeDateOfBirth(rawDob) {
   }
 
   try {
-    // 1. Convert all number words and ordinals to digits.
-    const cleanedText = wordToNumbers(rawDob, { fuzzy: true });
-    console.log(`Cleaned text after word-to-numbers: ${cleanedText}`);
+    const cleanedText = preprocessText(rawDob);
 
-    // 2. Use chrono-node for robust natural language parsing.
+    // 1. Use chrono-node for robust natural language parsing, ensuring we don't parse dates in the future.
     let parsedDate = chrono.parseDate(cleanedText, new Date(), { forwardDate: false });
 
-    // 3. If chrono fails, attempt parsing with date-fns using common formats.
+    // 2. If chrono fails, attempt parsing with date-fns using common formats.
     if (!parsedDate || !isValid(parsedDate)) {
         const formats = [
             'MMMM d yyyy',
@@ -46,14 +78,7 @@ async function normalizeDateOfBirth(rawDob) {
         }
     }
 
-    if (parsedDate && isValid(parsedDate)) {
-      // 4. Validate the parsed year for plausibility.
-      const currentYear = new Date().getFullYear();
-      const year = parsedDate.getFullYear();
-      if (year > currentYear || year < currentYear - 120) {
-          console.log(`Parsed year ${year} is not plausible. Returning null.`);
-          return null;
-      }
+    if (parsedDate && validateDOB(parsedDate)) {
       const finalDate = format(parsedDate, 'yyyy-MM-dd');
       console.log(`Successfully parsed date: ${finalDate}`);
       return finalDate;
@@ -67,10 +92,7 @@ async function normalizeDateOfBirth(rawDob) {
   }
 }
 
-
-
-
-// --- Express App Setup (Transport Layer) ---
+// --- Express App Setup ---
 app.use(cors());
 app.use(bodyParser.json());
 app.post('/api/enhanced-dob-normalize', async (req, res) => {
@@ -83,7 +105,7 @@ app.post('/api/enhanced-dob-normalize', async (req, res) => {
     if (normalizedDate) {
       res.json({ dob_iso: normalizedDate, type: 'success' });
     } else {
-      res.json({ dob_iso: null, type: 'unable_to_normalize' });
+      res.status(422).json({ dob_iso: null, type: 'unable_to_normalize' });
     }
   } catch (error) {
     console.error('Error in DOB endpoint:', error);
