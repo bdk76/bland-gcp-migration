@@ -1,20 +1,14 @@
 console.log("DOB NORMALIZE SERVICE STARTED");
 const express = require('express');
 const bodyParser = require('body-parser');
-const moment = require('moment');
 const cors = require('cors');
-const { parse, format, isValid, subYears } = require('date-fns');
-
+const { parse, format, isValid } = require('date-fns');
 const chrono = require('chrono-node');
+const { wordToNumbers } = require('word-to-numbers');
 
 const app = express();
 
-
-
 // --- Standalone, Testable Business Logic ---
-
-// New Hybrid Function
-
 
 async function normalizeDateOfBirth(rawDob) {
   console.log(`Normalizing DOB: ${rawDob}`);
@@ -24,70 +18,45 @@ async function normalizeDateOfBirth(rawDob) {
   }
 
   try {
-    const wordToNum = {
-        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-        'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
-        'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90
-    };
+    // 1. Convert all number words and ordinals to digits.
+    const cleanedText = wordToNumbers(rawDob, { fuzzy: true });
+    console.log(`Cleaned text after word-to-numbers: ${cleanedText}`);
 
-    let cleanedText = rawDob.toLowerCase().trim();
-    
-    // Replace ordinal indicators (st, nd, rd, th)
-    cleanedText = cleanedText.replace(/(\d+)(st|nd|rd|th)/g, '$1');
+    // 2. Use chrono-node for robust natural language parsing.
+    let parsedDate = chrono.parseDate(cleanedText, new Date(), { forwardDate: false });
 
-    for (const word in wordToNum) {
-        cleanedText = cleanedText.replace(new RegExp(`\\b${word}\\b`, 'g'), wordToNum[word]);
-    }
-
-    cleanedText = cleanedText.replace(/(\d{1,2}) (\d{1})/g, (match, p1, p2) => {
-        if (parseInt(p1) >= 20 && parseInt(p2) < 10) {
-            return parseInt(p1) + parseInt(p2);
-        }
-        return match;
-    });
-
-    cleanedText = cleanedText.replace(/(\d{2}) (\d{2})/g, (match, p1, p2) => {
-        return p1 + p2;
-    });
-
-    // More robust date parsing using date-fns
-    const formats = [
-      'MMMM d yyyy',
-      'd MMMM yyyy',
-      'MM/dd/yyyy',
-      'M/d/yyyy',
-      'MM-dd-yyyy',
-      'M-d-yyyy',
-      'yyyy-MM-dd',
-      'yyyy/MM/dd',
-    ];
-
-    let parsedDate;
-    for (const fmt of formats) {
-      const date = parse(cleanedText, fmt, new Date());
-      if (isValid(date)) {
-        parsedDate = date;
-        break;
-      }
-    }
-    
-    // Fallback to chrono-node for more complex cases
-    if (!parsedDate) {
-        const chronoResult = chrono.parseDate(cleanedText, new Date(), { forwardDate: false });
-        if (chronoResult) {
-            parsedDate = chronoResult;
+    // 3. If chrono fails, attempt parsing with date-fns using common formats.
+    if (!parsedDate || !isValid(parsedDate)) {
+        const formats = [
+            'MMMM d yyyy',
+            'd MMMM yyyy',
+            'MM/dd/yyyy',
+            'M/d/yyyy',
+            'MM-dd-yyyy',
+            'M-d-yyyy',
+            'yyyy-MM-dd',
+            'yyyy/MM/dd',
+        ];
+        for (const fmt of formats) {
+            const date = parse(cleanedText, fmt, new Date());
+            if (isValid(date)) {
+                parsedDate = date;
+                break;
+            }
         }
     }
 
     if (parsedDate && isValid(parsedDate)) {
-      // Check if the year is plausible (e.g., not in the future and not more than 120 years ago)
+      // 4. Validate the parsed year for plausibility.
       const currentYear = new Date().getFullYear();
       const year = parsedDate.getFullYear();
       if (year > currentYear || year < currentYear - 120) {
           console.log(`Parsed year ${year} is not plausible. Returning null.`);
           return null;
       }
-      return format(parsedDate, 'yyyy-MM-dd');
+      const finalDate = format(parsedDate, 'yyyy-MM-dd');
+      console.log(`Successfully parsed date: ${finalDate}`);
+      return finalDate;
     }
 
     console.log("Failed to parse date with all methods. Returning null.");
