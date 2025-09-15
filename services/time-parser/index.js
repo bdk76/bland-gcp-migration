@@ -5,12 +5,10 @@ const chrono = require('chrono-node');
 const { zonedTimeToUtc, format } = require('date-fns-tz');
 const { parse, isValid, isFuture, isPast, addYears, subYears } = require('date-fns');
 const { wordsToNumbers } = require('words-to-numbers');
-const Fuse = require('fuse.js');
-const { LanguageServiceClient } = require('@google-cloud/language');
+const moment = require('moment-timezone');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const languageClient = new LanguageServiceClient();
 
 // --- Middleware ---
 app.use(cors());
@@ -25,7 +23,12 @@ app.get('/health', (req, res) => {
 function preprocessText(text) {
   if (!text || typeof text !== 'string') return '';
   let cleanedText = text.toLowerCase();
-  cleanedText = wordsToNumbers(cleanedText, { fuzzy: true });
+
+  cleanedText = cleanedText.split(' ').map(word => {
+      const num = wordsToNumbers(word, { fuzzy: true });
+      return isNaN(num) ? word : num.toString();
+  }).join(' ');
+
   const corrections = {
     'tomorow': 'tomorrow',
     'wendsday': 'wednesday',
@@ -57,6 +60,16 @@ function validateParsedDate(date) {
   return true;
 }
 
+function validateDOB(date) {
+    if (!isValid(date)) return false;
+    const currentYear = new Date().getFullYear();
+    const year = date.getFullYear();
+    if (year > currentYear || year < currentYear - 120) {
+        return false;
+    }
+    return true;
+}
+
 // --- Parsing Layers ---
 async function parseWithStrictFormats(text, referenceDate) {
   const formats = ['MM/dd/yyyy', 'yyyy-MM-dd', 'M/d/yy', 'M/d/yyyy'];
@@ -69,8 +82,8 @@ async function parseWithStrictFormats(text, referenceDate) {
   return null;
 }
 
-async function parseWithChrono(text, referenceDate) {
-  const results = chrono.parse(text, referenceDate);
+async function parseWithChrono(text, referenceDate, forwardDate = true) {
+  const results = chrono.parse(text, referenceDate, { forwardDate });
   if (!results || results.length === 0) return null;
   const result = results[0];
   if (result && result.start) {
@@ -83,23 +96,141 @@ async function parseWithChrono(text, referenceDate) {
   return null;
 }
 
-// --- Main Parsing Orchestrator ---
+// --- Main Parsing Orchestrators ---
 async function parseNaturalTime(naturalTime, timezone) {
   const cleanedTime = preprocessText(naturalTime);
   const referenceDate = zonedTimeToUtc(new Date(), timezone);
 
-  // Layer 1: Strict Formats
   let parsedResult = await parseWithStrictFormats(cleanedTime, referenceDate);
   if (parsedResult) return parsedResult;
 
-  // Layer 2: Chrono
   parsedResult = await parseWithChrono(cleanedTime, referenceDate);
   if (parsedResult) return parsedResult;
 
   return { date: null, confidence: 'none', method: 'none' };
 }
 
-// --- API Endpoint ---
+async function normalizeDateOfBirth(rawDob) {
+    const cleanedDob = preprocessText(rawDob);
+    const referenceDate = new Date(); // DOBs are in the past
+
+    let parsedResult = await parseWithChrono(cleanedDob, referenceDate, false);
+    if (parsedResult && validateDOB(parsedResult.date)) {
+        return parsedResult;
+    }
+
+    return { date: null, confidence: 'none', method: 'none' };
+}
+
+
+// --- Date Formatting ---
+function addOrdinalSuffix(day) {
+  const j = day % 10;
+  const k = day % 100;
+  if (j === 1 && k !== 11) {
+    return day + 'st';
+  }
+  if (j === 2 && k !== 12) {
+    return day + 'nd';
+  }
+  if (j === 3 && k !== 13) {
+    return day + 'rd';
+  }
+  return day + 'th';
+}
+
+function formatAppointmentDateTime(date, time, timezone) {
+  try {
+    let appointmentMoment;
+    if (time) {
+      const dateTimeString = `${date} ${time}`;
+      appointmentMoment = moment.tz(dateTimeString, [
+        'YYYY-MM-DD HH:mm',
+        'YYYY-MM-DD HH:mm:ss',
+        'YYYY-MM-DD h:mm A',
+        'YYYY-MM-DD h:mm:ss A',
+        'YYYY-MM-DD hA',
+        'YYYY-MM-DD h A',
+        'MM/DD/YYYY HH:mm',
+        'MM/DD/YYYY h:mm A',
+        'MM/DD/YYYY hA',
+        'MM-DD-YYYY HH:mm',
+        'MM-DD-YYYY h:mm A',
+        'MM-DD-YYYY hA'
+      ], timezone);
+    } else {
+      appointmentMoment = moment.tz(date, [
+        'YYYY-MM-DD',
+        'MM/DD/YYYY',
+        'MM-DD-YYYY',
+        'YYYY/MM/DD',
+        'DD/MM/YYYY',
+        'DD-MM-YYYY'
+      ], timezone);
+    }
+
+    if (!appointmentMoment.isValid()) {
+      return {
+        formatted_date: null,
+        formatted_time: null,
+        confirmation_text: 'Unable to parse the provided date',
+        error: 'Invalid date format'
+      };
+    }
+
+    const dayOfWeek = appointmentMoment.format('dddd');
+    const month = appointmentMoment.format('MMMM');
+    const day = appointmentMoment.date();
+    const dayWithOrdinal = addOrdinalSuffix(day);
+    const year = appointmentMoment.year();
+    
+    const currentYear = moment().year();
+    const formatted_date = year === currentYear 
+      ? `${dayOfWeek}, ${month} ${dayWithOrdinal}`
+      : `${dayOfWeek}, ${month} ${dayWithOrdinal}, ${year}`;
+
+    let formatted_time = null;
+    if (time || appointmentMoment.hour() !== 0 || appointmentMoment.minute() !== 0) {
+      const hour = appointmentMoment.hour();
+      const minute = appointmentMoment.minute();
+      
+      if (minute === 0) {
+        formatted_time = appointmentMoment.format('hA');
+      } else {
+        formatted_time = appointmentMoment.format('h:mm A');
+      }
+    }
+
+    let confirmation_text;
+    if (formatted_time) {
+      confirmation_text = `Your appointment is scheduled for ${formatted_date} at ${formatted_time}`;
+    } else {
+      confirmation_text = `Your appointment is scheduled for ${formatted_date}`;
+    }
+
+    if (timezone !== 'America/New_York') {
+      const tzAbbr = appointmentMoment.format('z');
+      confirmation_text += ` (${tzAbbr})`;
+    }
+
+    return {
+      formatted_date,
+      formatted_time,
+      confirmation_text
+    };
+
+  } catch (error) {
+    console.error('Error in formatAppointmentDateTime:', error);
+    return {
+      formatted_date: null,
+      formatted_time: null,
+      confirmation_text: 'Error formatting date',
+      error: error.message
+    };
+  }
+}
+
+// --- API Endpoints ---
 app.post('/api/enhanced-parse-natural-time', async (req, res) => {
   try {
     const { datetime_request, timezone } = req.body.data || {};
@@ -136,9 +267,69 @@ app.post('/api/enhanced-parse-natural-time', async (req, res) => {
   }
 });
 
+app.post('/api/normalize-dob', async (req, res) => {
+    try {
+        const { raw_dob } = req.body.data || {};
+        if (!raw_dob) {
+            return res.status(400).json({ success: false, message: 'Missing required field: data.raw_dob' });
+        }
+
+        const result = await normalizeDateOfBirth(raw_dob);
+
+        if (result.date) {
+            res.json({
+                success: true,
+                message: 'Successfully normalized date of birth.',
+                dob_iso: format(result.date, 'yyyy-MM-dd'),
+            });
+        } else {
+            res.status(422).json({
+                success: false,
+                message: `Could not confidently normalize the date of birth from input: "${raw_dob}"`, 
+            });
+        }
+    } catch (error) {
+        console.error('Error normalizing DOB:', error);
+        res.status(500).json({ success: false, message: 'Internal server error during DOB normalization.' });
+    }
+});
+
+app.post('/api/format-appointment-date', (req, res) => {
+  try {
+    const { date, time, timezone } = req.body;
+    if (!date) {
+      return res.status(400).json({
+        error: 'Missing required field: date',
+        formatted_date: null,
+        formatted_time: null,
+        confirmation_text: null
+      });
+    }
+    const tz = timezone || 'America/New_York';
+    if (!moment.tz.zone(tz)) {
+      return res.status(400).json({
+        error: `Invalid timezone: ${timezone}. Please use a valid IANA timezone identifier.`, 
+        formatted_date: null,
+        formatted_time: null,
+        confirmation_text: null
+      });
+    }
+    const formattedData = formatAppointmentDateTime(date, time, tz);
+    res.json(formattedData);
+  } catch (error) {
+    console.error('Error formatting appointment date:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      formatted_date: null,
+      formatted_time: null,
+      confirmation_text: null
+    });
+  }
+});
+
 // --- Server Start ---
 app.listen(PORT, () => {
-  console.log(`Natural Language Time Parser service running on port ${PORT}`);
+  console.log(`Time Parser and Formatter service running on port ${PORT}`);
 });
 
 module.exports = app;
