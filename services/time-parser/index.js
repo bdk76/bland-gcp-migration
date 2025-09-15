@@ -24,9 +24,21 @@ function preprocessText(text) {
   if (!text || typeof text !== 'string') return '';
   let cleanedText = text.toLowerCase();
 
+  // Handle ordinal numbers (e.g., "18th" -> "18")
+  cleanedText = cleanedText.replace(/(\d+)(st|nd|rd|th)/g, '$1');
+
+  const numberWords = [
+      'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+      'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+      'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'thousand'
+  ];
+
   cleanedText = cleanedText.split(' ').map(word => {
-      const num = wordsToNumbers(word, { fuzzy: true });
-      return isNaN(num) ? word : num.toString();
+      if (numberWords.includes(word)) {
+          const num = wordsToNumbers(word, { fuzzy: true });
+          return isNaN(num) ? word : num.toString();
+      }
+      return word;
   }).join(' ');
 
   const corrections = {
@@ -43,6 +55,8 @@ function preprocessText(text) {
     'assoonaspossible': 'today',
     'anytimenextweek': 'anytime next week',
     'tomorrowanytime': 'tomorrow anytime',
+    'anytimethisweek': 'anytime this week',
+    'around 11': '11 am',
   };
   for (const [key, value] of Object.entries(corrections)) {
     cleanedText = cleanedText.replace(new RegExp(`\b${key}\b`, 'g'), value);
