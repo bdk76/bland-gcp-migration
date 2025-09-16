@@ -23,7 +23,7 @@ app.use(bodyParser.json());
 // GEMINI AI CONFIGURATION
 // ====================
 const vertex_ai = new VertexAI({
-  project: process.env.GOOGLE_CLOUD_PROJECT || 'bland-gcp-migration',
+  project: 'bland-gcp-migration',
   location: 'us-central1'
 });
 const geminiModel = vertex_ai.preview.getGenerativeModel({
