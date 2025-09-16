@@ -153,7 +153,7 @@ async function findBestSlots(state, stateAbbr, preferences, limit = 5) {
                 query = firestore.collection('doctor_scheduling')
                     .where('scheduledState', '==', stateValue)
                     .where('scheduledAvailable', '==', true)
-                    .where('scheduledDate', '>=', today)
+                    .where('scheduledDate', '>=', preferences.date)
                     .orderBy('scheduledDate') // Order by date to get the soonest
                     .limit(20); // Limit to a reasonable number for the fallback
 
