@@ -19,9 +19,9 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(bodyParser.json());
 
-// ====================
+// ==================== 
 // GEMINI AI CONFIGURATION
-// ====================
+// ==================== 
 // Initialize Vertex AI for Gemini - this automatically uses your GCP credentials
 const vertex_ai = new VertexAI({
   project: process.env.GOOGLE_CLOUD_PROJECT || 'gabar-ai-athena-integration',
@@ -39,9 +39,9 @@ const geminiModel = vertex_ai.preview.getGenerativeModel({
   },
 });
 
-// ====================
+// ==================== 
 // WEBHOOK SIGNATURE VERIFICATION
-// ====================
+// ==================== 
 /**
  * Verifies the webhook signature from Bland.ai for security
  * This ensures the request is actually coming from your Bland.ai system
@@ -61,9 +61,9 @@ function verifyWebhookSignature(req) {
   return signature === expectedSignature;
 }
 
-// ====================
+// ==================== 
 // GEMINI INTELLIGENT CORRECTION
-// ====================
+// ==================== 
 /**
  * Uses Gemini AI to fix common speech-to-text errors
  * This is the key innovation that solves your "anytimethisweek" problem
@@ -116,9 +116,9 @@ Input text: "${garbledText}"\n\nOutput ONLY the corrected text with proper spaci
   }
 }
 
-// ====================
+// ==================== 
 // FALLBACK APPOINTMENT PARSER
-// ====================
+// ==================== 
 /**
  * Catches common appointment phrases that chrono might miss
  * This is your safety net for phrases like "anytime this week"
@@ -234,9 +234,9 @@ function fallbackAppointmentParser(text, timezone) {
   return null; // No fallback match
 }
 
-// ====================
+// ==================== 
 // CHRONO-NODE PARSER
-// ====================
+// ==================== 
 /**
  * Uses chrono-node library to parse natural language dates
  * This is your primary parser that handles most date/time phrases
@@ -332,9 +332,9 @@ function determineConfidence(result, originalText) {
   return 'medium';
 }
 
-// ====================
+// ==================== 
 // MULTI-STRATEGY PARSER
-// ====================
+// ==================== 
 /**
  * Combines all parsing strategies to ensure we always return something useful
  * This is what makes your system robust - it tries multiple approaches
@@ -375,9 +375,9 @@ async function parseNaturalTimeWithFallbacks(naturalTime, timezone) {
   };
 }
 
-// ====================
+// ==================== 
 // MAIN API ENDPOINT
-// ====================
+// ==================== 
 /**
  * Main endpoint that Bland.ai calls
  * Matches the exact format your webhook expects
@@ -474,9 +474,108 @@ app.post('/api/enhanced-parse-natural-time', async (req, res) => {
   }
 });
 
-// ====================
+// ==================== 
+// DOB NORMALIZATION ENDPOINT
+// ==================== 
+/**
+ * Parses a raw date of birth string into ISO 8601 format (YYYY-MM-DD)
+ * This endpoint is critical for creating valid patient records
+ */
+app.post('/api/normalize-dob', async (req, res) => {
+  try {
+    // No signature verification needed if called internally, but good practice
+    if (!verifyWebhookSignature(req)) {
+      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
+    }
+
+    const { raw_dob } = req.body;
+    if (!raw_dob) {
+      return res.status(400).json({ success: false, message: 'Missing required field: raw_dob' });
+    }
+
+    console.log(`👶 Received DOB for normalization: "${raw_dob}"`);
+
+    // Step 1: Use Gemini to fix common speech-to-text errors (e.g., "nineteen ninety" -> "1990")
+    const correctedDob = await intelligentSpeechCorrection(raw_dob);
+
+    // Step 2: Use chrono-node to parse the corrected date
+    // We use a past reference date to correctly handle years like '98 vs '24
+    const referenceDate = new Date('2000-01-01'); 
+    const results = chrono.parse(correctedDob, referenceDate, { forwardDate: false });
+
+    if (!results || results.length === 0) {
+      console.log('❌ Chrono failed to parse DOB');
+      return res.status(200).json({ success: false, message: 'Could not parse date of birth', dob_iso: null });
+    }
+
+    const parsedDate = results[0].start.date();
+    const isoDate = moment(parsedDate).format('YYYY-MM-DD');
+
+    console.log(`✅ DOB normalized to: ${isoDate}`);
+
+    res.json({
+      success: true,
+      message: 'Successfully normalized date of birth',
+      dob_iso: isoDate,
+      debug: {
+        original_input: raw_dob,
+        corrected_input: correctedDob
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in DOB normalization:', error);
+    res.status(500).json({ success: false, message: 'Error processing DOB request', dob_iso: null });
+  }
+});
+
+// ==================== 
+// APPOINTMENT DATE FORMATTING ENDPOINT
+// ==================== 
+/**
+ * Formats a date and time into a human-readable string for confirmation messages
+ */
+app.post('/api/format-appointment-date', (req, res) => {
+  try {
+    if (!verifyWebhookSignature(req)) {
+      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
+    }
+
+    const { date, time, timezone } = req.body;
+    if (!date || !time || !timezone) {
+      return res.status(400).json({ success: false, message: 'Missing required fields: date, time, or timezone' });
+    }
+
+    console.log(`📅 Formatting appointment date: ${date} ${time} in ${timezone}`);
+
+    // Combine date and time, then parse in the specified timezone
+    const dateTimeString = `${date} ${time}`;
+    const appointmentMoment = moment.tz(dateTimeString, 'YYYY-MM-DD h:mm A', timezone);
+
+    // Format for speaking
+    const formattedDate = appointmentMoment.format('dddd, MMMM Do'); // e.g., "Tuesday, September 23rd"
+    const formattedTime = appointmentMoment.format('h:mm A'); // e.g., "2:00 PM"
+
+    const confirmationText = `Your appointment is confirmed for ${formattedDate} at ${formattedTime}.`;
+
+    console.log(`✅ Formatted confirmation: "${confirmationText}"`);
+
+    res.json({
+      success: true,
+      formatted_date: formattedDate,
+      formatted_time: formattedTime,
+      confirmation_text: confirmationText
+    });
+
+  } catch (error) {
+    console.error('Error in date formatting:', error);
+    res.status(500).json({ success: false, message: 'Error formatting date' });
+  }
+});
+
+// ==================== 
 // HEALTH CHECK ENDPOINT
-// ====================
+// ==================== 
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -486,9 +585,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ====================
+// ==================== 
 // TEST ENDPOINT
-// ====================
+// ==================== 
 /**
  * Test endpoint to verify Gemini is working
  * Useful for debugging after deployment
@@ -520,9 +619,9 @@ app.post('/api/test', async (req, res) => {
   });
 });
 
-// ====================
+// ==================== 
 // SERVER STARTUP
-// ====================
+// ==================== 
 const server = app.listen(PORT, () => {
   console.log(`🏥 Enhanced Natural Language Time Parser`);
   console.log(`✅ Server running on port ${PORT}`);
