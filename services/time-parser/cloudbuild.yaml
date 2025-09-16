@@ -2,10 +2,10 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   dir: 'services/time-parser'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA', '.' ]
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest', '.' ]
 - name: 'gcr.io/cloud-builders/docker'
   dir: 'services/time-parser'
-  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA' ]
+  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest' ]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
@@ -13,11 +13,11 @@ steps:
   - 'deploy'
   - 'time-parser'
   - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest'
   - '--region'
   - 'us-central1'
   - '--platform'
   - 'managed'
   - '--allow-unauthenticated'
 images:
-- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA'
+- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest'
