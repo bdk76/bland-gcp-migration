@@ -1,4 +1,4 @@
-# Add this options section at the very top to fix the logging issue
+#  Add this options section at the very top to fix the logging issue
 options:
   logging: CLOUD_LOGGING_ONLY
   
