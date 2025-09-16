@@ -1,4 +1,7 @@
-
+# Add this options section at the very top to fix the logging issue
+options:
+  logging: CLOUD_LOGGING_ONLY
+  
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA', '.' ]
