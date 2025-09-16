@@ -15,6 +15,12 @@ steps:
   args:
   - 'builds'
   - 'submit'
+  - '--config=services/webhook-check-timeslots/cloudbuild.yaml'
+  - '.'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - 'builds'
+  - 'submit'
   - '--config=services/date-formatter/cloudbuild.yaml'
   - '.'
 - name: 'gcr.io/cloud-builders/gcloud'
