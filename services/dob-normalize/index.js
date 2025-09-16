@@ -131,6 +131,28 @@ app.post('/api/enhanced-dob-normalize', async (req, res) => {
   }
 });
 
+// YOUR HEALTH CHECK ENDPOINT GOES HERE! 
+// This is AFTER your other routes but BEFORE app.listen()
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    service: 'dob-normalize',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// You could also add a root endpoint for basic service info
+app.get('/', (req, res) => {
+  res.json({ 
+    service: 'DOB Normalization Service',
+    version: '1.0.0',
+    endpoints: {
+      normalize: 'POST /api/enhanced-dob-normalize',
+      health: 'GET /health'
+    }
+  });
+});
+
 // --- Server Start Logic ---
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
