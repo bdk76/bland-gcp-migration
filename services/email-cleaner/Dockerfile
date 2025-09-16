@@ -2,11 +2,11 @@ FROM node:18
 
 WORKDIR /usr/src/app
 
-COPY services/email-cleaner/package*.json ./
+COPY package*.json ./
 
 RUN npm install
 
-COPY services/email-cleaner/. .
+COPY . .
 
 EXPOSE 8080
 
