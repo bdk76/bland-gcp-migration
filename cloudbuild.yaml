@@ -1,4 +1,5 @@
-# Unified Cloud Build configuration - No nested builds
+# Final Unified Cloud Build configuration
+# Includes only services that exist in the repository.
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -23,16 +24,6 @@ steps:
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:latest', '.' ]
 
 - name: 'gcr.io/cloud-builders/docker'
-  id: 'build-date-formatter'
-  dir: 'services/date-formatter'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-formatter:latest', '.' ]
-
-- name: 'gcr.io/cloud-builders/docker'
-  id: 'build-zipcode-validate'
-  dir: 'services/zipcode-validate'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/zipcode-validate:latest', '.' ]
-
-- name: 'gcr.io/cloud-builders/docker'
   id: 'build-availability'
   dir: 'services/availability'
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/availability:latest', '.' ]
@@ -43,14 +34,19 @@ steps:
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/email-cleaner:latest', '.' ]
 
 - name: 'gcr.io/cloud-builders/docker'
+  id: 'build-name-extraction'
+  dir: 'services/name-extraction'
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest', '.' ]
+
+- name: 'gcr.io/cloud-builders/docker'
   id: 'build-street-cleaner'
   dir: 'services/street-cleaner'
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest', '.' ]
 
 - name: 'gcr.io/cloud-builders/docker'
-  id: 'build-name-extraction'
-  dir: 'services/name-extraction'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest', '.' ]
+  id: 'build-webhook-zipcode-availability'
+  dir: 'services/webhook-zipcode-availability'
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-zipcode-availability:latest', '.' ]
 
 # ==============================================================================
 # 2. Push container images for all services in parallel
@@ -71,16 +67,6 @@ steps:
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:latest' ]
 
 - name: 'gcr.io/cloud-builders/docker'
-  id: 'push-date-formatter'
-  waitFor: ['build-date-formatter']
-  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-formatter:latest' ]
-
-- name: 'gcr.io/cloud-builders/docker'
-  id: 'push-zipcode-validate'
-  waitFor: ['build-zipcode-validate']
-  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/zipcode-validate:latest' ]
-
-- name: 'gcr.io/cloud-builders/docker'
   id: 'push-availability'
   waitFor: ['build-availability']
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/availability:latest' ]
@@ -91,14 +77,19 @@ steps:
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/email-cleaner:latest' ]
 
 - name: 'gcr.io/cloud-builders/docker'
+  id: 'push-name-extraction'
+  waitFor: ['build-name-extraction']
+  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest' ]
+
+- name: 'gcr.io/cloud-builders/docker'
   id: 'push-street-cleaner'
   waitFor: ['build-street-cleaner']
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest' ]
 
 - name: 'gcr.io/cloud-builders/docker'
-  id: 'push-name-extraction'
-  waitFor: ['build-name-extraction']
-  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest' ]
+  id: 'push-webhook-zipcode-availability'
+  waitFor: ['build-webhook-zipcode-availability']
+  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-zipcode-availability:latest' ]
 
 # ==============================================================================
 # 3. Deploy all services to Cloud Run in parallel
@@ -107,154 +98,57 @@ steps:
   id: 'deploy-time-parser'
   entrypoint: gcloud
   waitFor: ['push-time-parser']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'time-parser'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'time-parser', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-dob-normalize'
   entrypoint: gcloud
   waitFor: ['push-dob-normalize']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'dob-normalize'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'dob-normalize', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-webhook-check-timeslots'
   entrypoint: gcloud
   waitFor: ['push-webhook-check-timeslots']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'webhook-check-timeslots'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
-
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: 'deploy-date-formatter'
-  entrypoint: gcloud
-  waitFor: ['push-date-formatter']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'date-formatter'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-formatter:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
-
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: 'deploy-zipcode-validate'
-  entrypoint: gcloud
-  waitFor: ['push-zipcode-validate']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'zipcode-validate'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/zipcode-validate:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'webhook-check-timeslots', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-availability'
   entrypoint: gcloud
   waitFor: ['push-availability']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'availability'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/availability:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'availability', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/availability:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-email-cleaner'
   entrypoint: gcloud
   waitFor: ['push-email-cleaner']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'email-cleaner'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/email-cleaner:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
-
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: 'deploy-street-cleaner'
-  entrypoint: gcloud
-  waitFor: ['push-street-cleaner']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'street-cleaner'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'email-cleaner', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/email-cleaner:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-name-extraction'
   entrypoint: gcloud
   waitFor: ['push-name-extraction']
-  args:
-  - 'run'
-  - 'deploy'
-  - 'name-extraction'
-  - '--image'
-  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest'
-  - '--region'
-  - 'us-central1'
-  - '--platform'
-  - 'managed'
-  - '--allow-unauthenticated'
+  args: [ 'run', 'deploy', 'name-extraction', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-street-cleaner'
+  entrypoint: gcloud
+  waitFor: ['push-street-cleaner']
+  args: [ 'run', 'deploy', 'street-cleaner', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-webhook-zipcode-availability'
+  entrypoint: gcloud
+  waitFor: ['push-webhook-zipcode-availability']
+  args: [ 'run', 'deploy', 'webhook-zipcode-availability', '--image', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-zipcode-availability:latest', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated' ]
 
 # List all images that will be built
 images:
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:latest'
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:latest'
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:latest'
-- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/date-formatter:latest'
-- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/zipcode-validate:latest'
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/availability:latest'
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/email-cleaner:latest'
-- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest'
 - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/name-extraction:latest'
+- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/street-cleaner:latest'
+- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-zipcode-availability:latest'
