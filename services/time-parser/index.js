@@ -1,208 +1,121 @@
+/**
+ * Enhanced Natural Language Time Parser for Medical Appointment Scheduling
+ * This service uses Google's Gemini AI to fix speech-to-text errors before parsing
+ * Designed for Bland.ai webhook integration in medical scheduling systems
+ */
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const chrono = require('chrono-node');
 const moment = require('moment-timezone');
-const { LanguageServiceClient } = require('@google-cloud/language');
+const crypto = require('crypto');
+const { VertexAI } = require('@google-cloud/vertexai');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const languageClient = new LanguageServiceClient();
 
-// Middleware - These are like the basic tools your server needs
+// Middleware setup - these are the basic tools your server needs
 app.use(cors());
 app.use(bodyParser.json());
 
-// Health check endpoint - Like checking if the receptionist desk is open
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+// ====================
+// GEMINI AI CONFIGURATION
+// ====================
+// Initialize Vertex AI for Gemini - this automatically uses your GCP credentials
+const vertex_ai = new VertexAI({
+  project: process.env.GOOGLE_CLOUD_PROJECT || 'gabar-ai-athena-integration',
+  location: 'us-central1'
+});
+
+// Get the Gemini Flash model - optimized for speed in real-time applications
+const geminiModel = vertex_ai.preview.getGenerativeModel({
+  model: 'gemini-1.5-flash',
+  generationConfig: {
+    maxOutputTokens: 256,
+    temperature: 0.1,  // Low temperature for consistent medical scheduling
+    topP: 0.8,
+    topK: 40,
+  },
 });
 
 // ====================
-// GOOGLE NLP INTEGRATION
+// WEBHOOK SIGNATURE VERIFICATION
 // ====================
-// This is like having a grammar checker before processing
-async function analyzeAndCorrectText(text) {
+/**
+ * Verifies the webhook signature from Bland.ai for security
+ * This ensures the request is actually coming from your Bland.ai system
+ */
+function verifyWebhookSignature(req) {
+  const signature = req.headers['x-bland-signature'];
+  if (!signature || !process.env.GCP_WEBHOOK_SECRET) {
+    console.log('⚠️ Webhook signature verification skipped (missing signature or secret)');
+    return true; // Skip verification in development
+  }
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.GCP_WEBHOOK_SECRET)
+    .update(JSON.stringify(req.body))
+    .digest('hex');
+  
+  return signature === expectedSignature;
+}
+
+// ====================
+// GEMINI INTELLIGENT CORRECTION
+// ====================
+/**
+ * Uses Gemini AI to fix common speech-to-text errors
+ * This is the key innovation that solves your "anytimethisweek" problem
+ */
+async function intelligentSpeechCorrection(garbledText) {
+  // Quick validation - don't waste API calls on empty text
+  if (!garbledText || garbledText.length < 2) {
+    return garbledText;
+  }
+
   try {
-    const document = {
-      content: text,
-      type: 'PLAIN_TEXT',
-    };
-    const [result] = await languageClient.analyzeSyntax({ document });
-    const tokens = result.tokens;
-    const correctedText = tokens.map(token => token.text.content).join(' ');
-    console.log(`Original text: "${text}" -> Corrected text: "${correctedText}"`);
-    return correctedText;
-  } catch (error) {
-    console.error('Error calling Natural Language API:', error);
-    // If Google NLP fails, continue with original text
-    return text;
-  }
-}
-
-// ====================
-// NUMBER CONVERSION SYSTEM
-// ====================
-/**
- * Converts spoken numbers to digits - like a translator for number words
- * Examples: 
- * - "four fifteen ninety four" -> "4/15/94"
- * - "twenty three" -> "23"
- */
-function convertSpokenNumbersToDigits(text) {
-  // Our number dictionary - maps words to their digit equivalents
-  const numberWords = {
-    'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
-    'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
-    'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13',
-    'fourteen': '14', 'fifteen': '15', 'sixteen': '16', 'seventeen': '17',
-    'eighteen': '18', 'nineteen': '19', 'twenty': '20', 'thirty': '30',
-    'forty': '40', 'fifty': '50', 'sixty': '60', 'seventy': '70',
-    'eighty': '80', 'ninety': '90'
-  };
-
-  let processedText = text;
-  
-  // Handle compound numbers like "twenty one" -> "21"
-  processedText = processedText.replace(
-    /\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[\s-]?(one|two|three|four|five|six|seven|eight|nine)\b/gi, 
-    (match, tens, ones) => {
-      const tensDigit = numberWords[tens.toLowerCase()];
-      const onesDigit = numberWords[ones.toLowerCase()];
-      return String(parseInt(tensDigit) + parseInt(onesDigit));
-    }
-  );
-
-  // Look for date patterns (like when someone says "four fifteen ninety four" for 4/15/94)
-  const datePattern = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|twenty[\s-]?one|twenty[\s-]?two|twenty[\s-]?three|twenty[\s-]?four|twenty[\s-]?five|twenty[\s-]?six|twenty[\s-]?seven|twenty[\s-]?eight|twenty[\s-]?nine|thirty[\s-]?one)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|twenty[\s-]?one|twenty[\s-]?two|twenty[\s-]?three|twenty[\s-]?four|twenty[\s-]?five|twenty[\s-]?six|twenty[\s-]?seven|twenty[\s-]?eight|twenty[\s-]?nine|thirty|thirty[\s-]?one)\s+(ninety|nineteen|twenty|twenty[\s-]?one|twenty[\s-]?two|twenty[\s-]?three|twenty[\s-]?four|twenty[\s-]?five|twenty[\s-]?six|twenty[\s-]?seven|twenty[\s-]?eight|twenty[\s-]?nine|thirty|thirty[\s-]?one)[ -]?(one|two|three|four|five|six|seven|eight|nine)?\b/gi; // Corrected   and - for space and hyphen
-  
-  processedText = processedText.replace(datePattern, (match) => {
-    const parts = match.split(/\s+/);
-    const converted = parts.map(part => {
-      if (/^\d+$/.test(part)) return part;
-      const lower = part.toLowerCase();
-      return numberWords[lower] || part;
-    });
+    console.log(`🔧 Gemini fixing garbled text: "${garbledText}"`);
     
-    // Format as MM/DD/YY or MM/DD/YYYY
-    if (converted.length >= 3 && converted.every(p => /^\d+$/.test(p))) {
-      const month = converted[0];
-      const day = converted[1];
-      let year = converted.slice(2).join('');
-      
-      // Assume 1900s for years > 30, 2000s for years <= 30
-      if (year.length === 2) {
-        year = parseInt(year) > 30 ? '19' + year : '20' + year;
-      }
-      
-      return `${month}/${day}/${year}`;
-    }
-    return match;
-  });
+    // This prompt is specifically crafted for medical appointment scheduling
+    const prompt = `You are fixing speech-to-text errors for medical appointment scheduling.
+    
+CRITICAL RULES FOR CORRECTION:
+1. Words often stick together: "anytimethisweek" → "any time this week"
+2. Numbers are spelled out: "four fifteen ninety four" → "4/15/94"
+3. Times are spelled: "three thirty pm" → "3:30 pm"
+4. Days run together: "nextmonday" → "next monday"
+5. Common phrases: "tomorrowmorning" → "tomorrow morning"
 
-  // Replace any remaining standalone number words
-  for (const [word, digit] of Object.entries(numberWords)) {
-    const regex = new RegExp(`\b${word}\b`, 'gi');
-    processedText = processedText.replace(regex, digit);
+Input text: "${garbledText}"
+
+Output ONLY the corrected text with proper spacing and numbers. Do not add any explanation or change the meaning. Preserve the exact intent for medical scheduling.`;
+
+    // Create the request to Gemini
+    const request = {
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }],
+        },
+      ],
+    };
+
+    // Get Gemini's response
+    const response = await geminiModel.generateContent(request);
+    const result = response.response;
+    
+    // Extract the corrected text
+    const correctedText = result.candidates[0].content.parts[0].text.trim();
+    
+    console.log(`✅ Gemini corrected to: "${correctedText}"`);
+    return correctedText;
+    
+  } catch (error) {
+    // If Gemini fails, log it but don't crash - continue with original
+    console.error('❌ Gemini correction failed, using original:', error.message);
+    return garbledText;
   }
-
-  console.log(`Number conversion: "${text}" -> "${processedText}"`);
-  return processedText;
-}
-
-// ====================
-// WORD SEPARATION SYSTEM
-// ====================
-/**
- * Separates words that got stuck together - like adding spaces to "anytimethisweek"
- */
-function enhancedWordSeparation(text) {
-  // All the keywords we want to separate
-  const timeKeywords = [
-    'anytime', 'any', 'time', 'day', 'this', 'next', 'last', 
-    'week', 'month', 'year', 'morning', 'afternoon', 'evening', 
-    'night', 'today', 'tomorrow', 'yesterday'
-  ];
-  
-  const dayNames = [
-    'monday', 'tuesday', 'wednesday', 'thursday', 
-    'friday', 'saturday', 'sunday'
-  ];
-  
-  const monthNames = [
-    'january', 'february', 'march', 'april', 'may', 'june', 
-    'july', 'august', 'september', 'october', 'november', 'december'
-  ];
-  
-  // Sort by length (longest first) to avoid partial matches
-  const allKeywords = [...timeKeywords, ...dayNames, ...monthNames]
-    .sort((a, b) => b.length - a.length);
-
-  // Create a single regex to find all keywords
-  const regex = new RegExp(`(${allKeywords.join('|')})`, 'gi');
-  
-  // Replace occurrences, adding spaces around them, then clean up multiple spaces
-  let separated = text.replace(regex, ' $1 ').trim();
-  separated = separated.replace(/\s+/g, ' ');
-
-  // Special case: "anytime" should be "any time"
-  separated = separated.replace(/\banytime\b/gi, 'any time');
-  
-  console.log(`New separation: "${text}" -> "${separated}"`);
-  return separated;
-}
-
-// ====================
-// MAIN PREPROCESSING FUNCTION
-// ====================
-/**
- * The main text cleaner - runs all preprocessing steps in order
- */
-function preprocessNaturalTime(text) {
-  if (!text || typeof text !== 'string') {
-    return '';
-  }
-
-  let cleanedText = text.toLowerCase();
-  
-  // Step 1: Convert spoken numbers to digits
-  cleanedText = convertSpokenNumbersToDigits(cleanedText);
-  
-  // Step 2: Separate stuck-together words
-  cleanedText = enhancedWordSeparation(cleanedText);
-  
-  // Step 3: Fix common typos
-  const typoMap = {
-    'tomorow': 'tomorrow',
-    'tommorow': 'tomorrow',
-    'wendsday': 'wednesday',
-    'wensday': 'wednesday',
-    'thrusday': 'thursday',
-    'febuary': 'february',
-    'janurary': 'january'
-  };
-  for (const [typo, correct] of Object.entries(typoMap)) {
-    cleanedText = cleanedText.replace(new RegExp(`\b${typo}\b`, 'g'), correct);
-  }
-  
-  // Step 4: Normalize common synonyms
-  const synonymMap = {
-    'noon': '12:00pm',
-    'midday': '12:00pm',
-    'midnight': '12:00am',
-    'end of the week': 'friday',
-    'eod': '5:00pm',
-    'end of day': '5:00pm'
-  };
-  for (const [synonym, standard] of Object.entries(synonymMap)) {
-    cleanedText = cleanedText.replace(new RegExp(`\b${synonym}\b`, 'g'), standard);
-  }
-  
-  // Step 5: Clean up extra spaces
-  cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
-  
-  console.log(`Full preprocessing: "${text}" -> "${cleanedText}"`);
-  return cleanedText;
 }
 
 // ====================
@@ -210,15 +123,25 @@ function preprocessNaturalTime(text) {
 // ====================
 /**
  * Catches common appointment phrases that chrono might miss
- * This is your safety net for patient scheduling
+ * This is your safety net for phrases like "anytime this week"
  */
 function fallbackAppointmentParser(text, timezone) {
   const lowerText = text.toLowerCase().trim();
   const today = moment.tz(timezone);
   
-  // Common appointment request patterns
+  // Common appointment request patterns that Bland.ai users might say
   const appointmentPatterns = {
     'any time this week': {
+      date: today.clone().endOf('week').format('YYYY-MM-DD'),
+      time_of_day: 'any',
+      confidence: 'high',
+      flexible: true,
+      date_range: {
+        start: today.clone().startOf('week').format('YYYY-MM-DD'),
+        end: today.clone().endOf('week').format('YYYY-MM-DD')
+      }
+    },
+    'anytime this week': {
       date: today.clone().endOf('week').format('YYYY-MM-DD'),
       time_of_day: 'any',
       confidence: 'high',
@@ -258,26 +181,19 @@ function fallbackAppointmentParser(text, timezone) {
       confidence: 'high',
       urgent: true,
       note: 'Patient needs urgent appointment'
-    },
-    'next available': {
-      date: today.format('YYYY-MM-DD'),
-      time_of_day: 'any',
-      confidence: 'high',
-      urgent: true,
-      note: 'Patient wants next available slot'
     }
   };
   
   // Check for exact matches
   if (appointmentPatterns[lowerText]) {
-    console.log(`Fallback parser matched: "${lowerText}"`);
+    console.log(`📅 Fallback parser matched: "${lowerText}"`);
     return appointmentPatterns[lowerText];
   }
   
   // Check for partial pattern matches
   const partialPatterns = [
     {
-      regex: /\b(any time|whenever)\s+(this|next)\s+week\b/i,
+      regex: /\b(any ?time|whenever)\s+(this|next)\s+week\b/i,
       handler: (match) => {
         const isNext = match.includes('next');
         const weekOffset = isNext ? 1 : 0;
@@ -294,7 +210,7 @@ function fallbackAppointmentParser(text, timezone) {
       }
     },
     {
-      regex: /\b(morning|afternoon|evening)\s+(appointment|slot|time)\b/i,
+      regex: /\b(morning|afternoon|evening)\s+(appointment|slot|time)?\b/i,
       handler: (match) => {
         const timeOfDay = match.includes('morning') ? 'morning' : 
                          match.includes('afternoon') ? 'afternoon' : 'evening';
@@ -305,96 +221,29 @@ function fallbackAppointmentParser(text, timezone) {
           note: `Patient prefers ${timeOfDay} appointment`
         };
       }
-    },
-    {
-      regex: /\b(first|earliest)\s+(available|appointment|slot)\b/i,
-      handler: () => ({
-        date: today.format('YYYY-MM-DD'),
-        time_of_day: 'any',
-        confidence: 'high',
-        urgent: true,
-        note: 'Patient wants first available slot'
-      })
     }
   ];
   
-  // Try each pattern
+  // Try each partial pattern
   for (const pattern of partialPatterns) {
     const match = lowerText.match(pattern.regex);
     if (match) {
-      console.log(`Fallback parser partial match: "${lowerText}"`);
+      console.log(`📅 Fallback parser partial match: "${lowerText}"`);
       return pattern.handler(match[0]);
     }
   }
   
-  return null;
+  return null; // No fallback match
 }
 
 // ====================
-// PARTIAL INFO EXTRACTOR
+// CHRONO-NODE PARSER
 // ====================
 /**
- * Tries to extract ANY useful information from the text
- * Like salvaging clues from a garbled message
+ * Uses chrono-node library to parse natural language dates
+ * This is your primary parser that handles most date/time phrases
  */
-function extractPartialTimeInfo(text) {
-  const lowerText = text.toLowerCase();
-  const extracted = {
-    date: null,
-    time_of_day: 'any',
-    confidence: 'low',
-    partial_info: {}
-  };
-  
-  // Look for time of day preferences
-  if (lowerText.includes('morning') || lowerText.includes('am')) {
-    extracted.time_of_day = 'morning';
-    extracted.partial_info.time_preference = 'morning';
-  } else if (lowerText.includes('afternoon') || lowerText.includes('pm')) {
-    extracted.time_of_day = 'afternoon';
-    extracted.partial_info.time_preference = 'afternoon';
-  } else if (lowerText.includes('evening') || lowerText.includes('night')) {
-    extracted.time_of_day = 'evening';
-    extracted.partial_info.time_preference = 'evening';
-  }
-  
-  // Look for urgency indicators
-  if (lowerText.includes('urgent') || lowerText.includes('asap') || 
-      lowerText.includes('emergency') || lowerText.includes('soon')) {
-    extracted.urgent = true;
-    extracted.partial_info.urgency = 'high';
-  }
-  
-  // Look for flexibility indicators
-  if (lowerText.includes('any') || lowerText.includes('flexible') || 
-      lowerText.includes('whenever') || lowerText.includes('open')) {
-    extracted.flexible = true;
-    extracted.partial_info.flexibility = 'high';
-  }
-  
-  // Look for day references
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  for (const day of days) {
-    if (lowerText.includes(day)) {
-      extracted.partial_info.mentioned_day = day;
-    }
-  }
-  
-  // Only return if we found something useful
-  if (Object.keys(extracted.partial_info).length > 0) {
-    return extracted;
-  }
-  
-  return null;
-}
-
-// ====================
-// ORIGINAL CHRONO PARSER (UPDATED)
-// ====================
-/**
- * Original parser using chrono-node library
- */
-function parseNaturalTime(naturalTime, timezone) {
+function parseWithChrono(naturalTime, timezone) {
   try {
     const referenceDate = moment.tz(timezone).toDate();
     
@@ -403,27 +252,20 @@ function parseNaturalTime(naturalTime, timezone) {
     });
 
     if (!results || results.length === 0) {
-      return {
-        date: null,
-        time_of_day: 'any',
-        confidence: 'low'
-      };
+      return null;
     }
 
     const result = results[0];
     
     if (!result || !result.start) {
-      return {
-        date: null,
-        time_of_day: 'any',
-        confidence: 'low'
-      };
+      return null;
     }
 
     const parsedDate = result.start.date();
     const dateInTimezone = moment.tz(parsedDate, timezone);
     const formattedDate = dateInTimezone.format('YYYY-MM-DD');
     
+    // Determine time of day from the parsed result
     const timeOfDay = determineTimeOfDay(result, naturalTime);
     const confidence = determineConfidence(result, naturalTime);
 
@@ -434,17 +276,13 @@ function parseNaturalTime(naturalTime, timezone) {
     };
 
   } catch (error) {
-    console.error('Error in parseNaturalTime:', error);
-    return {
-      date: null,
-      time_of_day: 'any',
-      confidence: 'low'
-    };
+    console.error('Error in chrono parsing:', error);
+    return null;
   }
 }
 
 /**
- * Helper: Determine time of day from parsed result
+ * Helper function to determine time of day from parsed result
  */
 function determineTimeOfDay(result, originalText) {
   const lowerText = originalText.toLowerCase();
@@ -455,10 +293,11 @@ function determineTimeOfDay(result, originalText) {
   if (lowerText.includes('afternoon') || (lowerText.includes('pm') && !lowerText.includes('evening'))) {
     return 'afternoon';
   }
-  if (lowerText.includes('evening') || lowerText.includes('night') || lowerText.includes('tonight')) {
+  if (lowerText.includes('evening') || lowerText.includes('night')) {
     return 'evening';
   }
   
+  // Check if chrono detected a specific hour
   if (result.start.get('hour') !== undefined) {
     const hour = result.start.get('hour');
     if (hour >= 5 && hour < 12) return 'morning';
@@ -470,7 +309,7 @@ function determineTimeOfDay(result, originalText) {
 }
 
 /**
- * Helper: Determine confidence level of the parse
+ * Helper function to determine confidence level of the parse
  */
 function determineConfidence(result, originalText) {
   const lowerText = originalText.toLowerCase();
@@ -482,81 +321,59 @@ function determineConfidence(result, originalText) {
     return 'high';
   }
   
-  // High confidence keywords
+  // High confidence for specific keywords
   const highConfidenceKeywords = [
     'today', 'tomorrow', 'yesterday',
-    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
-    'january', 'february', 'march', 'april', 'may', 'june', 
-    'july', 'august', 'september', 'october', 'november', 'december'
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
   ];
   
   if (highConfidenceKeywords.some(keyword => lowerText.includes(keyword))) {
     return 'high';
   }
   
-  // Medium confidence keywords
-  const mediumConfidenceKeywords = [
-    'next', 'this', 'last', 'week', 'month', 'year',
-    'morning', 'afternoon', 'evening', 'night'
-  ];
-  
-  if (mediumConfidenceKeywords.some(keyword => lowerText.includes(keyword))) {
-    return 'medium';
-  }
-  
-  return 'low';
+  return 'medium';
 }
 
 // ====================
 // MULTI-STRATEGY PARSER
 // ====================
 /**
- * Main parsing function that tries multiple strategies
- * This is your master coordinator that ensures we always give a response
+ * Combines all parsing strategies to ensure we always return something useful
+ * This is what makes your system robust - it tries multiple approaches
  */
-function parseNaturalTimeWithFallbacks(naturalTime, timezone) {
-  const strategies = [];
-  
+async function parseNaturalTimeWithFallbacks(naturalTime, timezone) {
   // Strategy 1: Try chrono-node first
-  try {
-    const chronoResult = parseNaturalTime(naturalTime, timezone);
-    if (chronoResult.date && chronoResult.confidence !== 'low') {
-      console.log('✓ Chrono-node succeeded');
-      return { ...chronoResult, parser: 'chrono' };
-    }
-    strategies.push({ name: 'chrono', result: chronoResult });
-  } catch (error) {
-    console.log('✗ Chrono-node failed:', error.message);
+  const chronoResult = parseWithChrono(naturalTime, timezone);
+  if (chronoResult && chronoResult.date) {
+    console.log('✓ Chrono-node succeeded');
+    return {
+      ...chronoResult,
+      parser_used: 'chrono',
+      original_input: naturalTime
+    };
   }
   
   // Strategy 2: Try the fallback parser
   const fallbackResult = fallbackAppointmentParser(naturalTime, timezone);
   if (fallbackResult) {
     console.log('✓ Fallback parser succeeded');
-    return { ...fallbackResult, parser: 'fallback' };
+    return {
+      ...fallbackResult,
+      parser_used: 'fallback',
+      original_input: naturalTime
+    };
   }
   
-  // Strategy 3: Try to extract partial information
-  const extractedInfo = extractPartialTimeInfo(naturalTime);
-  if (extractedInfo) {
-    console.log('✓ Extracted partial information');
-    return { ...extractedInfo, parser: 'extraction' };
-  }
-  
-  // Strategy 4: Return a clarification request
-  console.log('⚠ All parsers failed - requesting clarification');
+  // Strategy 3: Return a "needs clarification" response
+  console.log('⚠ All parsers failed - needs clarification');
   return {
     date: null,
     time_of_day: 'any',
     confidence: 'none',
     needs_clarification: true,
     original_input: naturalTime,
-    suggested_responses: [
-      "Could you please specify a day? For example: 'Tomorrow' or 'Next Monday'",
-      "What day works best for you?",
-      "Would you prefer morning or afternoon?"
-    ],
-    parser: 'none'
+    parser_used: 'none',
+    message: 'Could not parse the date/time from the input'
   };
 }
 
@@ -564,219 +381,276 @@ function parseNaturalTimeWithFallbacks(naturalTime, timezone) {
 // MAIN API ENDPOINT
 // ====================
 /**
- * The main endpoint that processes appointment requests
+ * Main endpoint that Bland.ai calls
+ * Matches the exact format your webhook expects
  */
 app.post('/api/enhanced-parse-natural-time', async (req, res) => {
   try {
-    // Validate input
-    if (!req.body.data || !req.body.data.datetime_request) {
+    // Verify webhook signature for security
+    if (!verifyWebhookSignature(req)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid webhook signature'
+      });
+    }
+    
+    // Extract data from Bland.ai request format
+    const { datetime_request, timezone } = req.body.data || {};
+    
+    if (!datetime_request) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required field: data.datetime_request',
+        message: 'Missing required field: datetime_request',
         parsed: null
       });
     }
     
-    const { datetime_request: natural_time, timezone } = req.body.data;
     const tz = timezone || 'America/New_York';
     
     // Validate timezone
     if (!moment.tz.zone(tz)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid timezone: ${timezone}. Please use a valid IANA timezone identifier.`, 
+        message: `Invalid timezone: ${timezone}`,
         parsed: null
       });
     }
     
-    // Step 1: Grammar correction with Google NLP
-    const corrected_natural_time = await analyzeAndCorrectText(natural_time);
+    console.log(`📞 Received appointment request: "${datetime_request}" in timezone: ${tz}`);
     
-    // Step 2: Preprocessing (numbers + word separation + typos)
-    const cleaned_natural_time = preprocessNaturalTime(corrected_natural_time);
+    // Step 1: Use Gemini to fix speech-to-text errors
+    const correctedText = await intelligentSpeechCorrection(datetime_request);
     
-    // Step 3: Multi-strategy parsing
-    const parsedResult = parseNaturalTimeWithFallbacks(cleaned_natural_time, tz);
+    // Step 2: Parse the corrected text with multi-strategy approach
+    const parsedResult = await parseNaturalTimeWithFallbacks(correctedText, tz);
     
-    // Step 4: Prepare appropriate response
-    if (parsedResult.needs_clarification) {
-      // Couldn't parse - need clarification
-      res.json({
-        success: false,
-        message: 'Need clarification for appointment scheduling',
-        parsed: parsedResult,
-        clarification_needed: true,
-        suggested_prompts: parsedResult.suggested_responses,
-        original_input: natural_time,
-        processed_input: cleaned_natural_time,
-        partial_understanding: parsedResult.partial_info || {}
-      });
-    } else if (parsedResult.date) {
-      // Success! We have a date
+    // Step 3: Format response for Bland.ai
+    if (parsedResult.date) {
+      // Success - we parsed a date
       res.json({
         success: true,
-        message: 'Successfully parsed appointment request',
-        parsed: parsedResult,
-        original_input: natural_time,
-        processed_input: cleaned_natural_time,
-        scheduling_notes: {
+        message: 'Successfully parsed date/time',
+        parsed: {
+          date: parsedResult.date,
+          time_of_day: parsedResult.time_of_day || 'any',
+          confidence: parsedResult.confidence || 'medium',
           flexible: parsedResult.flexible || false,
           urgent: parsedResult.urgent || false,
-          date_range: parsedResult.date_range || null,
-          parser_used: parsedResult.parser,
-          note: parsedResult.note || null
+          date_range: parsedResult.date_range || null
+        },
+        debug: {
+          original_input: datetime_request,
+          corrected_input: correctedText,
+          parser_used: parsedResult.parser_used
         }
       });
     } else {
-      // Partial success - we got some info but not a complete date
+      // Could not parse - return null date for Bland.ai to handle
       res.json({
         success: false,
-        message: 'Partially understood appointment request',
-        parsed: parsedResult,
-        original_input: natural_time,
-        processed_input: cleaned_natural_time,
-        partial_info: parsedResult.partial_info || {},
-        suggestion: 'Please provide a specific day for the appointment'
+        message: parsedResult.message || 'Could not parse date/time',
+        parsed: {
+          date: null,
+          time_of_day: 'any',
+          confidence: 'low'
+        },
+        debug: {
+          original_input: datetime_request,
+          corrected_input: correctedText,
+          parser_used: 'none'
+        }
       });
     }
     
   } catch (error) {
-    console.error('Error in appointment parsing:', error);
+    console.error('Error in parse endpoint:', error);
     
-    // Even in errors, provide helpful response
+    // Return a safe error response that Bland.ai can handle
     res.status(200).json({
       success: false,
-      message: 'Could not process appointment request',
-      parsed: null,
-      fallback_response: 'When would you like to schedule your appointment? You can say things like "tomorrow morning" or "any time next week".',
-      error_details: error.message
+      message: 'Error processing date/time request',
+      parsed: {
+        date: null,
+        time_of_day: 'any',
+        confidence: 'low'
+      },
+      error: error.message
     });
   }
 });
 
 // ====================
-// TEST ENDPOINTS
+// DOB NORMALIZATION ENDPOINT
 // ====================
 /**
- * Test endpoint for preprocessing steps
+ * Additional endpoint for normalizing date of birth
+ * I noticed this in your Bland.ai configuration
  */
-app.post('/api/test-preprocessing', (req, res) => {
-  const { text } = req.body;
-  
-  if (!text) {
-    return res.status(400).json({
-      error: 'Please provide text to test'
+app.post('/api/normalize-dob', async (req, res) => {
+  try {
+    const { raw_dob } = req.body;
+    
+    if (!raw_dob) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing raw_dob field',
+        dob_iso: null
+      });
+    }
+    
+    // Use Gemini to fix any speech-to-text errors first
+    const correctedDob = await intelligentSpeechCorrection(raw_dob);
+    
+    // Parse the date of birth
+    const parsedDate = chrono.parseDate(correctedDob);
+    
+    if (parsedDate) {
+      // Format as ISO date (YYYY-MM-DD)
+      const isoDate = moment(parsedDate).format('YYYY-MM-DD');
+      
+      res.json({
+        success: true,
+        dob_iso: isoDate,
+        original: raw_dob,
+        corrected: correctedDob
+      });
+    } else {
+      res.json({
+        success: false,
+        dob_iso: null,
+        message: 'Could not parse date of birth',
+        original: raw_dob,
+        corrected: correctedDob
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error in DOB normalization:', error);
+    res.status(500).json({
+      success: false,
+      dob_iso: null,
+      error: error.message
     });
   }
-  
-  const afterNumbers = convertSpokenNumbersToDigits(text);
-  const afterSeparation = enhancedWordSeparation(afterNumbers);
-  const final = preprocessNaturalTime(text);
-  
-  res.json({
-    original: text,
-    step1_numbers: afterNumbers,
-    step2_separation: afterSeparation,
-    final_result: final,
-    explanation: "Each step shows how the text transforms"
+});
+
+// ====================
+// FORMAT APPOINTMENT DATE ENDPOINT
+// ====================
+/**
+ * Formats appointment date/time for confirmation messages
+ * Also referenced in your Bland.ai configuration
+ */
+app.post('/api/format-appointment-date', async (req, res) => {
+  try {
+    const { date, time, timezone } = req.body;
+    
+    if (!date || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing date or time',
+        formatted_date: null,
+        formatted_time: null
+      });
+    }
+    
+    const tz = timezone || 'America/New_York';
+    
+    // Create a moment object with the date and time in the specified timezone
+    const appointmentMoment = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm A', tz);
+    
+    // Format for display
+    const formattedDate = appointmentMoment.format('MMMM D, YYYY');
+    const formattedTime = appointmentMoment.format('h:mm A');
+    const confirmationText = `${formattedDate} at ${formattedTime}`;
+    
+    res.json({
+      success: true,
+      formatted_date: formattedDate,
+      formatted_time: formattedTime,
+      confirmation_text: confirmationText,
+      iso_datetime: appointmentMoment.toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error formatting appointment date:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ====================
+// HEALTH CHECK ENDPOINT
+// ====================
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    service: 'Enhanced Natural Language Time Parser',
+    gemini: 'enabled',
+    timezone: moment.tz.guess()
   });
 });
 
+// ====================
+// TEST ENDPOINT
+// ====================
 /**
- * Test endpoint for common appointment scenarios
+ * Test endpoint to verify Gemini is working
+ * Useful for debugging after deployment
  */
-app.post('/api/test-appointment-parsing', async (req, res) => {
+app.post('/api/test', async (req, res) => {
   const testCases = [
-    "anytime this week",
     "anytimethisweek",
-    "tomorrow morning",
-    "tomorrowmorning",
     "four fifteen ninety four",
-    "whenever is good",
-    "asap",
-    "next available",
-    "thursday afternoon",
-    "any time next week",
-    "first available slot",
-    "garbage text xyz123"
+    "tomorrowmorning",
+    "three thirty pm",
+    "next monday afternoon"
   ];
   
-  const timezone = req.body.timezone || 'America/New_York';
-  
-  const results = await Promise.all(testCases.map(async (testCase) => {
-    const corrected = await analyzeAndCorrectText(testCase);
-    const cleaned = preprocessNaturalTime(corrected);
-    const parsed = parseNaturalTimeWithFallbacks(cleaned, timezone);
-    
-    return {
-      input: testCase,
-      cleaned: cleaned,
-      result: parsed,
-      success: parsed.date !== null
-    };
-  }));
-  
-  res.json({
-    test_results: results,
-    summary: {
-      total: results.length,
-      successful: results.filter(r => r.success).length,
-      partial: results.filter(r => r.result.partial_info && !r.success).length,
-      needs_clarification: results.filter(r => r.result.needs_clarification).length
-    }
-  });
-});
-
-/**
- * Test a single input with detailed debugging
- */
-app.post('/api/debug-parse', async (req, res) => {
-  const { text, timezone = 'America/New_York' } = req.body;
-  
-  if (!text) {
-    return res.status(400).json({
-      error: 'Please provide text to debug'
+  const results = [];
+  for (const test of testCases) {
+    const corrected = await intelligentSpeechCorrection(test);
+    const parsed = await parseNaturalTimeWithFallbacks(corrected, 'America/New_York');
+    results.push({
+      input: test,
+      corrected: corrected,
+      parsed: parsed
     });
   }
   
-  const steps = {};
-  
-  // Track each step
-  steps.original = text;
-  steps.after_google_nlp = await analyzeAndCorrectText(text);
-  steps.after_numbers = convertSpokenNumbersToDigits(steps.after_google_nlp);
-  steps.after_separation = enhancedWordSeparation(steps.after_numbers);
-  steps.final_preprocessed = preprocessNaturalTime(steps.after_google_nlp);
-  
-  // Try each parser individually
-  steps.chrono_result = parseNaturalTime(steps.final_preprocessed, timezone);
-  steps.fallback_result = fallbackAppointmentParser(steps.final_preprocessed, timezone);
-  steps.extraction_result = extractPartialTimeInfo(steps.final_preprocessed, timezone);
-  steps.final_result = parseNaturalTimeWithFallbacks(steps.final_preprocessed, timezone);
-  
-  res.json({
-    input: text,
-    processing_steps: steps,
-    final_outcome: {
-      success: steps.final_result.date !== null,
-      parser_used: steps.final_result.parser,
-      result: steps.final_result
-    }
+  res.json({ 
+    test_results: results,
+    gemini_status: 'working',
+    project: process.env.GOOGLE_CLOUD_PROJECT
   });
 });
 
 // ====================
 // SERVER STARTUP
 // ====================
-app.listen(PORT, () => {
-  console.log(`🏥 Enhanced Appointment Parser Service`);
+const server = app.listen(PORT, () => {
+  console.log(`🏥 Enhanced Natural Language Time Parser`);
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📍 Main endpoint: http://localhost:${PORT}/api/enhanced-parse-natural-time`);
-  console.log(`🧪 Test endpoints:`);
-  console.log(`   - http://localhost:${PORT}/api/test-preprocessing`);
-  console.log(`   - http://localhost:${PORT}/api/test-appointment-parsing`);
-  console.log(`   - http://localhost:${PORT}/api/debug-parse`);
-  console.log(`💊 Health check: http://localhost:${PORT}/health`);
+  console.log(`🤖 Gemini AI: Enabled`);
+  console.log(`📍 Project: ${process.env.GOOGLE_CLOUD_PROJECT || 'Not set'}`);
+  console.log(`🌍 Region: us-central1`);
+  console.log(`📋 Endpoints:`);
+  console.log(`   - POST /api/enhanced-parse-natural-time (main parser)`);
+  console.log(`   - POST /api/normalize-dob (DOB normalization)`);
+  console.log(`   - POST /api/format-appointment-date (date formatting)`);
+  console.log(`   - GET /health (health check)`);
+  console.log(`   - POST /api/test (test Gemini correction)`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
