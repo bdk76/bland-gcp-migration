@@ -2,10 +2,10 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   dir: 'services/dob-normalize'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA', '.' ]
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:$COMMIT_SHA', '.' ]
 - name: 'gcr.io/cloud-builders/docker'
   dir: 'services/dob-normalize'
-  args: [ 'push', 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA' ]
+  args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:$COMMIT_SHA' ]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
@@ -13,11 +13,11 @@ steps:
   - 'deploy'
   - 'dob-normalize'
   - '--image'
-  - 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:$COMMIT_SHA'
   - '--region'
   - 'us-central1'
   - '--platform'
   - 'managed'
   - '--allow-unauthenticated'
 images:
-- 'us-central1-docker.pkg.dev/gabar-ai-athena-integration/bland-images/dob-normalize:$COMMIT_SHA'
+- 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/dob-normalize:$COMMIT_SHA'
