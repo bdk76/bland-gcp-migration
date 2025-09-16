@@ -41,9 +41,12 @@ const geminiModel = vertex_ai.preview.getGenerativeModel({
 // ====================
 async function intelligentSpeechCorrection(garbledText) {
   if (!garbledText || garbledText.length < 2) return garbledText;
-  try {
-    console.log(`🔧 Gemini fixing garbled text: "${garbledText}"`);
-    const prompt = `You are fixing speech-to-text errors for medical appointment scheduling.
+
+  const MAX_RETRIES = 3;
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      console.log(`[Attempt ${i + 1}/${MAX_RETRIES}] 🔧 Gemini fixing garbled text: "${garbledText}"`);
+      const prompt = `You are fixing speech-to-text errors for medical appointment scheduling.
     
 CRITICAL RULES FOR CORRECTION:
 1. Words often stick together: "anytimethisweek" → "any time this week"
@@ -55,15 +58,22 @@ CRITICAL RULES FOR CORRECTION:
 Input text: "${garbledText}"
 
 Output ONLY the corrected text with proper spacing and numbers. Do not add any explanation or change the meaning. Preserve the exact intent for medical scheduling.`;
-    const request = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-    const response = await geminiModel.generateContent(request);
-    const correctedText = response.response.candidates[0].content.parts[0].text.trim();
-    console.log(`✅ Gemini corrected to: "${correctedText}"`);
-    return correctedText;
-  } catch (error) {
-    console.error('❌ Gemini correction failed, using original:', error.message);
-    return garbledText;
+      const request = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
+      const response = await geminiModel.generateContent(request);
+      const correctedText = response.response.candidates[0].content.parts[0].text.trim();
+      console.log(`✅ Gemini corrected to: "${correctedText}"`);
+      return correctedText; // Success, exit the loop
+    } catch (error) {
+      console.error(`[Attempt ${i + 1}/${MAX_RETRIES}] ❌ Gemini correction failed:`, error.message);
+      if (i === MAX_RETRIES - 1) {
+        console.error('All Gemini retries failed, using original text.');
+        return garbledText; // Last attempt failed, return original
+      }
+      // Wait a bit before retrying
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
+  return garbledText; // Should not be reached, but as a fallback
 }
 
 // ====================
