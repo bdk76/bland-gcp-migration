@@ -1,8 +1,10 @@
 
 steps:
 - name: 'gcr.io/cloud-builders/docker'
+  dir: 'services/time-parser'
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA', '.' ]
 - name: 'gcr.io/cloud-builders/docker'
+  dir: 'services/time-parser'
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/time-parser:$COMMIT_SHA' ]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
