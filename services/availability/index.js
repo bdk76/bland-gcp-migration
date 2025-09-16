@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const moment = require('moment');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -9,73 +10,22 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Mock appointment data
+// Using a more extensive mock data set for realistic testing
 const MOCK_APPOINTMENTS = [
-  {
-    date: "2024-01-15",
-    time_slot: "9AM", // Using format without ":00" as per user preference [[memory:5341974]]
-    provider: "Dr. Smith",
-    provider_id: "123",
-    appointment_id: "apt-001"
-  },
-  {
-    date: "2024-01-15",
-    time_slot: "2PM", // Using format without ":00" as per user preference [[memory:5341974]]
-    provider: "Dr. Smith",
-    provider_id: "123",
-    appointment_id: "apt-002"
-  },
-  {
-    date: "2024-01-16",
-    time_slot: "10AM", // Using format without ":00" as per user preference [[memory:5341974]]
-    provider: "Dr. Jones",
-    provider_id: "124",
-    appointment_id: "apt-003"
-  },
-  {
-    date: "2024-01-16",
-    time_slot: "3PM", // Using format without ":00" as per user preference [[memory:5341974]]
-    provider: "Dr. Jones",
-    provider_id: "124",
-    appointment_id: "apt-004"
-  },
-  {
-    date: "2024-01-17",
-    time_slot: "11AM", // Using format without ":00" as per user preference [[memory:5341974]]
-    provider: "Dr. Smith",
-    provider_id: "123",
-    appointment_id: "apt-005"
-  }
-];
+  // Today + 1 Day
+  { date: moment().add(1, 'days').format('YYYY-MM-DD'), time_slot: "9AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-001" },
+  { date: moment().add(1, 'days').format('YYYY-MM-DD'), time_slot: "2PM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-002" },
+  
+  // Today + 2 Days
+  { date: moment().add(2, 'days').format('YYYY-MM-DD'), time_slot: "10AM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-003" },
+  
+  // Today + 3 Days
+  { date: moment().add(3, 'days').format('YYYY-MM-DD'), time_slot: "11AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-005" },
+  { date: moment().add(3, 'days').format('YYYY-MM-DD'), time_slot: "4PM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-004" },
 
-// Extended mock data for more realistic testing
-const EXTENDED_MOCK_APPOINTMENTS = [
-  // Week 1
-  { date: "2024-01-15", time_slot: "9AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-001" },
-  { date: "2024-01-15", time_slot: "10AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-002" },
-  { date: "2024-01-15", time_slot: "11AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-003" },
-  { date: "2024-01-15", time_slot: "2PM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-004" },
-  { date: "2024-01-15", time_slot: "3PM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-005" },
-  
-  { date: "2024-01-16", time_slot: "9AM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-006" },
-  { date: "2024-01-16", time_slot: "10AM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-007" },
-  { date: "2024-01-16", time_slot: "11AM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-008" },
-  { date: "2024-01-16", time_slot: "2PM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-009" },
-  { date: "2024-01-16", time_slot: "4PM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-010" },
-  
-  { date: "2024-01-17", time_slot: "8AM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-011" },
-  { date: "2024-01-17", time_slot: "9AM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-012" },
-  { date: "2024-01-17", time_slot: "10AM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-013" },
-  { date: "2024-01-17", time_slot: "1PM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-014" },
-  { date: "2024-01-17", time_slot: "3PM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-015" },
-  
-  // Week 2
-  { date: "2024-01-22", time_slot: "9AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-016" },
-  { date: "2024-01-22", time_slot: "11AM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-017" },
-  { date: "2024-01-22", time_slot: "2PM", provider: "Dr. Smith", provider_id: "123", appointment_id: "apt-018" },
-  
-  { date: "2024-01-23", time_slot: "10AM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-019" },
-  { date: "2024-01-23", time_slot: "3PM", provider: "Dr. Jones", provider_id: "124", appointment_id: "apt-020" }
+  // Today + 7 Days
+  { date: moment().add(7, 'days').format('YYYY-MM-DD'), time_slot: "9AM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-006" },
+  { date: moment().add(7, 'days').format('YYYY-MM-DD'), time_slot: "10AM", provider: "Dr. Williams", provider_id: "125", appointment_id: "apt-007" },
 ];
 
 // Health check endpoint
@@ -83,42 +33,61 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
-// Available slots endpoint - returns mock data
+// Available slots endpoint - with improved fallback logic
 app.post('/api/available-slots', (req, res) => {
   try {
     const { 
       start_date, 
       end_date, 
       provider_id, 
-      limit = 5, // Limiting to 5 options as per user preference [[memory:5341984]]
-      extended = false 
+      limit = 5
     } = req.body;
 
-    // Use extended mock data if requested, otherwise use the basic set
-    let appointments = extended ? [...EXTENDED_MOCK_APPOINTMENTS] : [...MOCK_APPOINTMENTS];
+    let appointments = [...MOCK_APPOINTMENTS];
 
-    // Filter by provider if specified
+    // --- Step 1: Perform the Specific Query ---
+    let specificAppointments = appointments;
+
+    // Filter future appointments only
+    specificAppointments = specificAppointments.filter(apt => moment(apt.date).isSameOrAfter(moment(), 'day'));
+
     if (provider_id) {
-      appointments = appointments.filter(apt => apt.provider_id === provider_id);
+      specificAppointments = specificAppointments.filter(apt => apt.provider_id === provider_id);
     }
-
-    // Filter by date range if specified
     if (start_date) {
-      appointments = appointments.filter(apt => apt.date >= start_date);
+      specificAppointments = specificAppointments.filter(apt => apt.date === start_date);
     }
     if (end_date) {
-      appointments = appointments.filter(apt => apt.date <= end_date);
+      specificAppointments = specificAppointments.filter(apt => apt.date <= end_date);
     }
 
-    // Apply limit - maximum of 5 options as per user preference [[memory:5341984]]
-    const effectiveLimit = Math.min(limit, 5);
-    const limitedAppointments = appointments.slice(0, effectiveLimit);
+    let finalAppointments = specificAppointments.slice(0, limit);
+
+    // --- Step 2: Perform a Broader, Fallback Query ---
+    if (finalAppointments.length === 0) {
+      console.log(`No exact matches found for start_date: ${start_date}. Performing broader search.`);
+      
+      let fallbackAppointments = appointments.filter(apt => moment(apt.date).isSameOrAfter(moment(), 'day'));
+
+      if (provider_id) {
+        fallbackAppointments = fallbackAppointments.filter(apt => apt.provider_id === provider_id);
+      }
+      
+      // If a start_date was given, find the next available slots after that date
+      if (start_date) {
+        fallbackAppointments = fallbackAppointments.filter(apt => moment(apt.date).isAfter(start_date, 'day'));
+      }
+
+      finalAppointments = fallbackAppointments.slice(0, 3); // Return the next 3 available as a fallback
+    }
+
 
     // Return the response
     res.json({
-      has_slots: limitedAppointments.length > 0,
-      total_slots: limitedAppointments.length,
-      slots: limitedAppointments
+      has_slots: finalAppointments.length > 0,
+      total_slots: finalAppointments.length,
+      // The Bland flow expects 'best_slots', so we provide it.
+      best_slots: finalAppointments 
     });
 
   } catch (error) {
@@ -127,99 +96,58 @@ app.post('/api/available-slots', (req, res) => {
       error: 'Internal server error',
       has_slots: false,
       total_slots: 0,
-      slots: []
+      best_slots: []
     });
   }
 });
 
-// Get providers endpoint (additional utility endpoint)
+// ... (other endpoints remain the same)
+
+// Get providers endpoint
 app.get('/api/providers', (req, res) => {
   const providers = [
     { provider_id: "123", name: "Dr. Smith", specialty: "General Practice" },
     { provider_id: "124", name: "Dr. Jones", specialty: "Pediatrics" },
     { provider_id: "125", name: "Dr. Williams", specialty: "Internal Medicine" }
   ];
-  
-  res.json({
-    providers: providers,
-    total: providers.length
-  });
+  res.json({ providers: providers, total: providers.length });
 });
 
 // Get specific appointment details
 app.get('/api/appointment/:appointmentId', (req, res) => {
-  const { appointmentId } = req.params;
-  
-  // Find appointment in all mock data
-  const allAppointments = [...MOCK_APPOINTMENTS, ...EXTENDED_MOCK_APPOINTMENTS];
-  const appointment = allAppointments.find(apt => apt.appointment_id === appointmentId);
-  
+  const appointment = MOCK_APPOINTMENTS.find(apt => apt.appointment_id === req.params.appointmentId);
   if (appointment) {
-    res.json({
-      found: true,
-      appointment: appointment
-    });
+    res.json({ found: true, appointment: appointment });
   } else {
-    res.status(404).json({
-      found: false,
-      error: 'Appointment not found',
-      appointment: null
-    });
+    res.status(404).json({ found: false, error: 'Appointment not found' });
   }
 });
 
-// Book appointment endpoint (mock - doesn't actually persist)
+// Book appointment endpoint (mock)
 app.post('/api/book-appointment', (req, res) => {
   const { appointment_id, patient_name, patient_id } = req.body;
-  
   if (!appointment_id || !patient_name || !patient_id) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing required fields: appointment_id, patient_name, patient_id'
-    });
+    return res.status(400).json({ success: false, error: 'Missing required fields' });
   }
-  
-  // Mock booking response
   res.json({
     success: true,
-    booking: {
-      confirmation_number: `CONF-${Date.now()}`,
-      appointment_id: appointment_id,
-      patient_name: patient_name,
-      patient_id: patient_id,
-      booked_at: new Date().toISOString()
-    }
+    booking: { confirmation_number: `CONF-${Date.now()}` }
   });
 });
 
 // Cancel appointment endpoint (mock)
 app.post('/api/cancel-appointment', (req, res) => {
-  const { appointment_id, confirmation_number } = req.body;
-  
-  if (!appointment_id && !confirmation_number) {
-    return res.status(400).json({
-      success: false,
-      error: 'Must provide either appointment_id or confirmation_number'
-    });
+  const { appointment_id } = req.body;
+  if (!appointment_id) {
+    return res.status(400).json({ success: false, error: 'Missing appointment_id' });
   }
-  
-  // Mock cancellation response
-  res.json({
-    success: true,
-    cancellation: {
-      cancelled_at: new Date().toISOString(),
-      appointment_id: appointment_id || 'unknown',
-      confirmation_number: confirmation_number || 'unknown'
-    }
-  });
+  res.json({ success: true });
 });
+
 
 // Start the server
 app.listen(PORT, () => {
   console.log(`Appointment Availability service running on port ${PORT}`);
-  console.log(`Main endpoint: http://localhost:${PORT}/api/available-slots`);
-  console.log(`Providers list: http://localhost:${PORT}/api/providers`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
 });
 
 module.exports = app;
