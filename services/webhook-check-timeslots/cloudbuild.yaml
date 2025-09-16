@@ -1,9 +1,7 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  dir: 'services/webhook-check-timeslots'
-  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:$COMMIT_SHA', '.' ]
+  args: [ 'build', '-t', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:$COMMIT_SHA', '-f', 'services/webhook-check-timeslots/Dockerfile', 'services/webhook-check-timeslots' ]
 - name: 'gcr.io/cloud-builders/docker'
-  dir: 'services/webhook-check-timeslots'
   args: [ 'push', 'us-central1-docker.pkg.dev/bland-gcp-migration/bland-images/webhook-check-timeslots:$COMMIT_SHA' ]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
