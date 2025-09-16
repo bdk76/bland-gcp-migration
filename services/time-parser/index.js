@@ -27,7 +27,7 @@ const vertex_ai = new VertexAI({
   location: 'us-central1'
 });
 const geminiModel = vertex_ai.preview.getGenerativeModel({
-  model: 'gemini-1.5-flash-001',
+  model: 'gemini-2.0-flash-lite',
   generationConfig: {
     maxOutputTokens: 256,
     temperature: 0.1,
