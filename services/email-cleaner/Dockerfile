@@ -1,13 +1,7 @@
-FROM node:18
-
-WORKDIR /usr/src/app
-
+FROM node:18-slim
+WORKDIR /app
 COPY package*.json ./
-
-RUN npm install
-
+RUN npm install --production
 COPY . .
-
 EXPOSE 8080
-
-CMD [ "npm", "start" ]
+CMD ["node", "index.js"]
